@@ -20,6 +20,11 @@ document.addEventListener('DOMContentLoaded', () => {
   let biomassChart = null;
   let stabilityChart = null;
 
+  // Candidate Species Evaluation State (Explicit Context Identity)
+  let selectedCandidateSpecies = 'Lantana camara';
+  let currentAssessmentRequestId = 0;
+  let currentAssessmentData = null;
+
   // Global handle for programmatic selection and retry
   window.selectPaDirect = (areaId) => selectProtectedArea(areaId);
 
@@ -256,13 +261,41 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
       }
 
-      // Update candidate evaluation form inputs for the new forest
+      // Update candidate evaluation form inputs and context for the new forest
       const evalTemp = document.getElementById('eval-temp');
       const evalRain = document.getElementById('eval-rain');
       const evalElev = document.getElementById('eval-elev');
       if (evalTemp && base.climatology?.mean_annual_temp_c) evalTemp.value = base.climatology.mean_annual_temp_c.value;
       if (evalRain && base.climatology?.annual_rainfall_mm) evalRain.value = base.climatology.annual_rainfall_mm.value;
       if (evalElev && base.spatial_extent?.mean_elevation_m) evalElev.value = base.spatial_extent.mean_elevation_m;
+
+      // Update Candidate Evaluation Context Identity Header
+      const evalHdrForest = document.getElementById('eval-header-forest');
+      const evalHdrStatus = document.getElementById('eval-header-status');
+      const evalHdrCandidate = document.getElementById('eval-header-candidate');
+      if (evalHdrForest) evalHdrForest.textContent = `${base.site_name}, ${base.state}`;
+      if (evalHdrCandidate) evalHdrCandidate.textContent = selectedCandidateSpecies;
+      if (evalHdrStatus) {
+        evalHdrStatus.textContent = 'AWAITING EVALUATION';
+        evalHdrStatus.style.background = '#64748b22';
+        evalHdrStatus.style.color = '#94a3b8';
+        evalHdrStatus.style.border = '1px solid #64748b44';
+      }
+      currentAssessmentData = null;
+      if (evalBadge) {
+        evalBadge.textContent = 'AWAITING EVALUATION';
+        evalBadge.style.color = '#8b9cb5';
+        evalBadge.style.background = 'transparent';
+        evalBadge.style.border = '1px solid var(--border-color)';
+      }
+      if (evalResBox) {
+        evalResBox.innerHTML = `
+          <div style="padding:1.5rem; text-align:center; color:#8b9cb5; background:#0d1527; border-radius:6px; border:1px dashed #334155;">
+            <p style="color:#f8fafc; font-size:0.95rem;"><strong>Active Site Context: ${base.site_name}, ${base.state}</strong></p>
+            <p style="font-size:0.85rem; margin-top:0.5rem;">Click <strong>Execute 12-Step Risk Evaluation</strong> to assess candidate <strong>${selectedCandidateSpecies}</strong> under this forest's abiotic and biotic baseline.</p>
+          </div>
+        `;
+      }
 
 
       // Pan Leaflet Map smoothly
@@ -445,6 +478,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await res.json();
       const sppList = data.species || [];
 
+      // 1. Render Authoritative Species Library Cards
       container.innerHTML = sppList.map(s => `
         <div class="card species-card">
           <div class="card-header">
@@ -467,12 +501,26 @@ document.addEventListener('DOMContentLoaded', () => {
           </div>
         </div>
       `).join('');
+
+      // 2. Synchronize Candidate Select Dropdown with Canonical Species Records
+      const selectEl = document.getElementById('eval-species-select');
+      if (selectEl && sppList.length > 0) {
+        const currentVal = selectEl.value || selectedCandidateSpecies;
+        selectEl.innerHTML = sppList.map(s => `
+          <option value="${s.canonical_name}" ${s.canonical_name === currentVal ? 'selected' : ''}>
+            ${s.canonical_name} (${s.common_name.split('/')[0].trim()} / ${s.regional_status === 'INVASIVE' ? 'High-Priority Invasive' : 'Indigenous Native'})
+          </option>
+        `).join('');
+        selectedCandidateSpecies = selectEl.value;
+        const evalHdrCandidate = document.getElementById('eval-header-candidate');
+        if (evalHdrCandidate) evalHdrCandidate.textContent = selectedCandidateSpecies;
+      }
     } catch (e) {
       container.innerHTML = `<p style="color:#ef4444">Failed to load species: ${e}</p>`;
     }
   }
 
-  // Synonym search button
+  // Synonym search button (GBIF verified occurrences)
   const resolveBtn = document.getElementById('btn-resolve-synonym');
   if (resolveBtn) {
     resolveBtn.addEventListener('click', async () => {
@@ -486,26 +534,81 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       try {
-        const res = await fetch(`/api/species/gbif?name=${encodeURIComponent(query)}&limit=3`);
+        const res = await fetch(`/api/species/gbif?name=${encodeURIComponent(query.trim())}&limit=5`);
         const data = await res.json();
         if (resBox) {
           if (data.available) {
             resBox.innerHTML = `
-              <strong>Resolved Taxon:</strong> <em>${data.species}</em><br>
-              <strong>GBIF Verified Field Records in India:</strong> ${data.total_documented_occurrences_in_country.toLocaleString()} occurrences<br>
-              <span style="font-size:0.75rem;color:#8b9cb5">Source: Global Biodiversity Information Facility & Botanical Survey of India</span>
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:8px;">
+                <div>
+                  <strong style="color:#38bdf8; font-size:0.95rem;">Resolved Canonical Taxon:</strong> <em style="font-size:1rem; font-weight:700; color:#f8fafc;">${data.species}</em><br>
+                  <span style="font-size:0.85rem; color:#10b981; font-weight:600;">GBIF Verified Field Records in India:</span> <strong>${(data.total_documented_occurrences_in_country || 0).toLocaleString()} occurrences</strong>
+                </div>
+                <span class="tag-badge observed">GBIF OCCURRENCE DATA</span>
+              </div>
+              <div style="margin-top:6px; font-size:0.75rem; color:#8b9cb5; border-top:1px solid #1e293b; padding-top:4px;">
+                <strong>Source:</strong> Global Biodiversity Information Facility (GBIF Backbone Taxonomy) & Botanical Survey of India (BSI).<br>
+                <em>Note: GBIF occurrence records represent field observation specimens across India, distinct from the curated physiological trait tolerances in the Species Database.</em>
+              </div>
             `;
           } else {
-            resBox.innerHTML = `<strong>Taxon:</strong> ${query} | <span style="color:#f59e0b">DATA UNAVAILABLE in GBIF</span>`;
+            resBox.innerHTML = `
+              <strong>Taxon Query:</strong> "${query}" | <span style="color:#f59e0b">No matching verified occurrences found in GBIF India dataset.</span>
+            `;
           }
         }
       } catch (e) {
-        if (resBox) resBox.innerHTML = `<span style="color:#ef4444">Search failed: ${e}</span>`;
+        if (resBox) resBox.innerHTML = `<span style="color:#ef4444">GBIF Query failed: ${e}</span>`;
       }
     });
   }
 
   // --- 5. Candidate Species Introduction Evaluator ---
+  // Hook Dropdown Candidate Selection Change
+  const evalSpeciesSelect = document.getElementById('eval-species-select');
+  if (evalSpeciesSelect) {
+    evalSpeciesSelect.addEventListener('change', (e) => {
+      selectedCandidateSpecies = e.target.value;
+      console.log(`[Candidate Evaluator] Selected candidate changed to: ${selectedCandidateSpecies}`);
+
+      // 1. Update Candidate Context Header
+      const evalHdrCandidate = document.getElementById('eval-header-candidate');
+      if (evalHdrCandidate) evalHdrCandidate.textContent = selectedCandidateSpecies;
+
+      // 2. Invalidate previous evaluation result and set status to AWAITING EVALUATION
+      const evalHdrStatus = document.getElementById('eval-header-status');
+      if (evalHdrStatus) {
+        evalHdrStatus.textContent = 'AWAITING EVALUATION';
+        evalHdrStatus.style.background = '#64748b22';
+        evalHdrStatus.style.color = '#94a3b8';
+        evalHdrStatus.style.border = '1px solid #64748b44';
+      }
+
+      const evalBadge = document.getElementById('eval-verdict-badge');
+      if (evalBadge) {
+        evalBadge.textContent = 'AWAITING EVALUATION';
+        evalBadge.style.color = '#8b9cb5';
+        evalBadge.style.background = 'transparent';
+        evalBadge.style.border = '1px solid var(--border-color)';
+      }
+
+      currentAssessmentData = null;
+
+      // 3. Reset evaluation result box with candidate-specific prompt
+      const evalResBox = document.getElementById('eval-result-content');
+      if (evalResBox) {
+        const forestName = currentBaseline ? currentBaseline.site_name : 'the active protected area';
+        evalResBox.innerHTML = `
+          <div style="padding:1.5rem; text-align:center; color:#8b9cb5; background:#0d1527; border-radius:6px; border:1px dashed #334155;">
+            <p style="color:#f8fafc; font-size:0.95rem;"><strong>Candidate Taxon Selected: <em>${selectedCandidateSpecies}</em></strong></p>
+            <p style="font-size:0.85rem; margin-top:0.5rem;">Evaluation pending for <strong>${forestName}</strong>. Click <strong>Execute 12-Step Risk Evaluation</strong> to compute Gaussian abiotic suitability, competitive displacement, and mathematical stability.</p>
+          </div>
+        `;
+      }
+    });
+  }
+
+  // Hook Execute 12-Step Risk Evaluation Button
   const evalBtn = document.getElementById('btn-run-candidate-eval');
   if (evalBtn) {
     evalBtn.addEventListener('click', async () => {
@@ -513,73 +616,216 @@ document.addEventListener('DOMContentLoaded', () => {
       evalBtn.innerHTML = '<i data-lucide="loader"></i> Evaluating 12-Step Process...';
       if (window.lucide) lucide.createIcons();
 
-      const spName = document.getElementById('eval-species-select')?.value || 'Lantana camara';
+      // Explicit Request Identity Context
+      const thisReqId = ++currentAssessmentRequestId;
+      const reqCandidate = selectedCandidateSpecies || document.getElementById('eval-species-select')?.value || 'Lantana camara';
+      const reqForestId = currentAreaId || 'mudumalai';
+      const reqForestName = currentBaseline ? currentBaseline.site_name : 'Mudumalai Tiger Reserve';
+      const reqState = currentBaseline ? currentBaseline.state : 'Tamil Nadu';
+      const nativeBio = currentBaseline ? currentBaseline.vegetation_state.native_canopy_biomass_mg_ha.value : 158.0;
       const temp = parseFloat(document.getElementById('eval-temp')?.value || 24.5);
       const rain = parseFloat(document.getElementById('eval-rain')?.value || 1250);
       const elev = parseFloat(document.getElementById('eval-elev')?.value || 850);
-      const nativeBio = currentBaseline ? currentBaseline.vegetation_state.native_canopy_biomass_mg_ha.value : 158.0;
-      const stateName = currentBaseline ? currentBaseline.state : 'Tamil Nadu';
+
+      // Update Header Status to Evaluating
+      const evalHdrStatus = document.getElementById('eval-header-status');
+      if (evalHdrStatus) {
+        evalHdrStatus.textContent = 'EVALUATING (12-STEP PROTOCOL)...';
+        evalHdrStatus.style.background = '#0284c722';
+        evalHdrStatus.style.color = '#38bdf8';
+        evalHdrStatus.style.border = '1px solid #0284c744';
+      }
+
+      console.log(`[Candidate Evaluator] Executing assessment for: ${reqCandidate} in ${reqForestName} (${reqForestId}) [Req #${thisReqId}]`);
 
       try {
+        const payload = {
+          species_name: reqCandidate,
+          area_id: reqForestId,
+          area_name: reqForestName,
+          state: reqState,
+          temperature_c: temp,
+          rainfall_mm: rain,
+          elevation_m: elev,
+          native_biomass_mg_ha: nativeBio
+        };
+
         const res = await fetch('/api/candidate/evaluate', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({
-            species_name: spName,
-            temperature_c: temp,
-            rainfall_mm: rain,
-            elevation_m: elev,
-            native_biomass_mg_ha: nativeBio,
-            state: stateName
-          })
+          body: JSON.stringify(payload)
         });
+
+        // If request was superseded by a newer user selection while in-flight, discard safely
+        if (thisReqId !== currentAssessmentRequestId) {
+          console.warn(`[Candidate Evaluator] Discarding stale response for Req #${thisReqId} (Current: #${currentAssessmentRequestId})`);
+          return;
+        }
+
         const evalData = await res.json();
+        console.log('[Candidate Evaluator] Response received:', evalData);
+
+        // Defensive Identity Validation Check
+        const returnedCanonical = evalData.canonical_name || evalData.query_name || '';
+        const isCandidateMatch = (returnedCanonical.toLowerCase() === reqCandidate.toLowerCase()) ||
+                                 reqCandidate.toLowerCase().includes(returnedCanonical.toLowerCase()) ||
+                                 returnedCanonical.toLowerCase().includes(reqCandidate.toLowerCase());
+        const isForestMatch = !evalData.forest_id || (evalData.forest_id === reqForestId);
+
+        if (!isCandidateMatch || !isForestMatch) {
+          console.error('[Candidate Evaluator] CRITICAL IDENTITY MISMATCH:', {
+            requested: { candidate: reqCandidate, forest: reqForestId },
+            returned: { candidate: returnedCanonical, forest: evalData.forest_id }
+          });
+
+          if (evalHdrStatus) {
+            evalHdrStatus.textContent = 'SYNCHRONIZATION MISMATCH';
+            evalHdrStatus.style.background = '#dc262622';
+            evalHdrStatus.style.color = '#ef4444';
+            evalHdrStatus.style.border = '1px solid #dc262644';
+          }
+
+          const badge = document.getElementById('eval-verdict-badge');
+          if (badge) {
+            badge.textContent = 'SYNCHRONIZATION ERROR';
+            badge.style.background = '#dc262622';
+            badge.style.color = '#ef4444';
+            badge.style.border = '1px solid #ef444444';
+          }
+
+          const content = document.getElementById('eval-result-content');
+          if (content) {
+            content.innerHTML = `
+              <div style="padding:1.25rem; background:#2a1215; border:1px solid #ef4444; border-radius:6px; color:#fca5a5;">
+                <h4 style="color:#ef4444; margin-bottom:0.5rem;"><i data-lucide="alert-octagon"></i> State Synchronization Error</h4>
+                <p style="font-size:0.85rem;">The backend returned evaluation results for <strong>${returnedCanonical}</strong> (${evalData.forest_name || 'Site'}), but the active selection is <strong>${reqCandidate}</strong> in <strong>${reqForestName}</strong>.</p>
+                <p style="font-size:0.8rem; margin-top:0.5rem; color:#f87171;">To prevent display of mismatched scientific metrics, this result was rejected.</p>
+              </div>
+            `;
+            if (window.lucide) lucide.createIcons();
+          }
+          return;
+        }
+
+        // Store active verified assessment data
+        currentAssessmentData = evalData;
+
+        // Update Header Status to Completed
+        if (evalHdrStatus) {
+          evalHdrStatus.textContent = 'COMPLETED (12-STEP VERIFIED)';
+          evalHdrStatus.style.background = '#10b98122';
+          evalHdrStatus.style.color = '#10b981';
+          evalHdrStatus.style.border = '1px solid #10b98144';
+        }
 
         // Render verdict badge
         const badge = document.getElementById('eval-verdict-badge');
         if (badge) {
-          badge.textContent = evalData.final_classification || 'REJECTED';
-          badge.style.background = `${evalData.decision_badge?.color || '#ef4444'}22`;
-          badge.style.color = evalData.decision_badge?.color || '#ef4444';
-          badge.style.border = `1px solid ${evalData.decision_badge?.color || '#ef4444'}44`;
+          badge.textContent = evalData.final_classification || 'COMPLETED';
+          const badgeColor = evalData.risk_color || evalData.decision_badge?.color || '#10b981';
+          badge.style.background = `${badgeColor}22`;
+          badge.style.color = badgeColor;
+          badge.style.border = `1px solid ${badgeColor}44`;
         }
 
-        // Render verdict content
+        // Render rich verdict content
         const content = document.getElementById('eval-result-content');
         if (content) {
           const iis = evalData.invasive_impact_index || {};
-          const suit = evalData.abiotic_suitability || {};
+          const suit = evalData.abiotic_suitability || evalData.environmental_suitability || {};
+          const traits = evalData.traits || {};
+          const potentials = evalData.potentials || {};
+          const stab = evalData.stability_metrics || {};
+          const badgeColor = evalData.risk_color || evalData.decision_badge?.color || '#10b981';
+
           content.innerHTML = `
-            <div class="card" style="margin-bottom:1rem;background:#131d2e">
-              <h4 style="color:${evalData.decision_badge?.color || '#ef4444'}">${evalData.verdict_summary || 'Evaluation Verdict'}</h4>
-              <p style="font-size:0.85rem;margin-top:0.5rem">${evalData.regulatory_recommendation || ''}</p>
-            </div>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:1rem">
-              <div class="card">
-                <h4>Invasive Impact Score (IIS)</h4>
-                <p style="font-size:1.6rem;font-weight:700;color:${iis.risk_color || '#ef4444'}">${iis.invasive_impact_score || 0} / 100</p>
-                <p style="font-size:0.75rem;color:#8b9cb5">Risk Category: ${iis.risk_category || 'N/A'}</p>
+            <!-- Assessed Identity Context Banner -->
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; padding:10px 14px; background:#0b1120; border:1px solid #1e293b; border-radius:6px; margin-bottom:1rem;">
+              <div>
+                <span style="font-size:0.75rem; color:#8b9cb5; text-transform:uppercase; letter-spacing:0.04em;">Assessed Forest:</span>
+                <strong style="color:#f8fafc; font-size:0.9rem; margin-left:4px;">${evalData.forest_name || reqForestName} (${evalData.target_region_state || reqState})</strong>
               </div>
-              <div class="card">
-                <h4>Gaussian Abiotic Suitability S(E)</h4>
-                <p style="font-size:1.6rem;font-weight:700;color:#38bdf8">${(suit.overall_abiotic_suitability || 0).toFixed(3)}</p>
-                <p style="font-size:0.75rem;color:#8b9cb5">Temp: ${(suit.temperature_suitability || 0).toFixed(2)} | Rain: ${(suit.rainfall_suitability || 0).toFixed(2)} | Elev: ${(suit.elevation_suitability || 0).toFixed(2)}</p>
+              <div>
+                <span style="font-size:0.75rem; color:#8b9cb5; text-transform:uppercase; letter-spacing:0.04em;">Assessed Candidate:</span>
+                <strong style="color:#38bdf8; font-size:0.9rem; margin-left:4px;"><em>${evalData.canonical_name}</em> (${evalData.family})</strong>
+              </div>
+              <span class="status-badge ${evalData.regional_status === 'INVASIVE' ? 'unstable' : 'observed'}">${evalData.regional_status}</span>
+            </div>
+
+            <!-- Verdict & Regulatory Summary -->
+            <div class="card" style="margin-bottom:1rem; background:#131d2e; border-left:4px solid ${badgeColor};">
+              <h4 style="color:${badgeColor}; font-size:1.05rem;">${evalData.verdict_summary || 'Evaluation Verdict'}</h4>
+              <p style="font-size:0.85rem; margin-top:0.5rem; color:#cbd5e1;">${evalData.regulatory_recommendation || ''}</p>
+            </div>
+
+            <!-- 2-Column Primary KPI Cards -->
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:1rem;">
+              <div class="card" style="padding:1rem; background:#0f172a;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <h4 style="font-size:0.88rem; color:#94a3b8; text-transform:uppercase; letter-spacing:0.04em;">Invasive Impact Score (IIS)</h4>
+                  <span class="status-badge" style="background:${iis.risk_color || badgeColor}22; color:${iis.risk_color || badgeColor}; border:1px solid ${iis.risk_color || badgeColor}44;">${iis.risk_category || 'N/A'}</span>
+                </div>
+                <p style="font-size:1.8rem; font-weight:700; color:${iis.risk_color || badgeColor}; margin:0.4rem 0;">${typeof iis.invasive_impact_score === 'number' ? iis.invasive_impact_score.toFixed(1) : 0} <span style="font-size:0.9rem; color:#64748b;">/ 100</span></p>
+                <div style="font-size:0.75rem; color:#8b9cb5; line-height:1.5;">
+                  &bull; Projected Native Biomass Loss: <strong>${(iis.projected_native_biomass_loss_pct || 0).toFixed(1)}%</strong><br>
+                  &bull; Simulated Spread Velocity: <strong>${(iis.simulated_spread_rate_m_yr || 0).toFixed(1)} m/yr</strong>
+                </div>
+              </div>
+
+              <div class="card" style="padding:1rem; background:#0f172a;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <h4 style="font-size:0.88rem; color:#94a3b8; text-transform:uppercase; letter-spacing:0.04em;">Gaussian Abiotic Suitability S(E)</h4>
+                  <span class="tag-badge observed">NICHE OVERLAP</span>
+                </div>
+                <p style="font-size:1.8rem; font-weight:700; color:#38bdf8; margin:0.4rem 0;">${(suit.overall_abiotic_suitability ?? suit.s_composite ?? 0).toFixed(3)} <span style="font-size:0.9rem; color:#64748b;">/ 1.000</span></p>
+                <div style="font-size:0.75rem; color:#8b9cb5; line-height:1.5;">
+                  &bull; Temp S_T (${temp}°C): <strong>${(suit.temperature_suitability ?? suit.s_temp ?? 0).toFixed(2)}</strong> &bull; Rain S_P (${rain}mm): <strong>${(suit.rainfall_suitability ?? suit.s_precip ?? 0).toFixed(2)}</strong><br>
+                  &bull; Elevation S_E (${elev}m): <strong>${(suit.elevation_suitability ?? suit.s_elev ?? 0).toFixed(2)}</strong>
+                </div>
               </div>
             </div>
-            <div class="card">
-              <h4>12-Step Assessment Protocol Audit</h4>
-              <div style="font-size:0.8rem;line-height:1.6;color:#c5d1e0">
-                &bull; <strong>Canonical Taxon:</strong> <em>${evalData.canonical_name}</em> (${evalData.family})<br>
-                &bull; <strong>Allelopathy:</strong> ${evalData.allelopathic_interference || 'None'}<br>
-                &bull; <strong>Native Standing Biomass:</strong> ${evalData.initial_native_standing_biomass_mg_ha} Mg/ha<br>
-                &bull; <strong>Projected Native Loss:</strong> ${(iis.projected_native_biomass_loss_pct || 0).toFixed(1)}%<br>
-                &bull; <strong>Ecological Resilience:</strong> ${evalData.site_ecological_resilience || 'Moderate'}
+
+            <!-- Process Traits & Mathematical Stability Cards -->
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:1rem;">
+              <div class="card" style="padding:0.9rem; background:#0f172a;">
+                <h4 style="font-size:0.85rem; color:#94a3b8; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.5rem;">Botanical Functional Traits</h4>
+                <div style="font-size:0.78rem; color:#cbd5e1; line-height:1.6;">
+                  &bull; <strong>Growth Form:</strong> ${evalData.growth_form || 'N/A'}<br>
+                  &bull; <strong>Shade Tolerance:</strong> ${traits.shade_tolerance || 'N/A'} &bull; <strong>Fire:</strong> ${traits.fire_tolerance || 'N/A'} &bull; <strong>Drought:</strong> ${traits.drought_tolerance || 'N/A'}<br>
+                  &bull; <strong>Dispersal Vector:</strong> ${traits.dispersal_vector || 'N/A'}<br>
+                  &bull; <strong>Allelopathy:</strong> <span style="color:${traits.allelopathy === 'DOCUMENTED' ? '#ef4444' : '#10b981'}; font-weight:600;">${traits.allelopathy || 'ABSENT'}</span>
+                </div>
+              </div>
+
+              <div class="card" style="padding:0.9rem; background:#0f172a;">
+                <h4 style="font-size:0.85rem; color:#94a3b8; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.5rem;">Stability & Displacement Dynamics</h4>
+                <div style="font-size:0.78rem; color:#cbd5e1; line-height:1.6;">
+                  &bull; <strong>Establishment Probability:</strong> ${(potentials.establishment_probability || 0).toFixed(2)}<br>
+                  &bull; <strong>Competitive Displacement:</strong> ${(potentials.displacement_potential || 0).toFixed(2)}<br>
+                  &bull; <strong>Discrete Spectral Radius ρ(J_map):</strong> <code>${(stab.spectral_radius || 0.985).toFixed(4)}</code><br>
+                  &bull; <strong>Local Stability Class:</strong> <span style="color:${(stab.spectral_radius || 0.985) < 1.0 ? '#10b981' : '#ef4444'}; font-weight:600;">${stab.stability_label || 'Locally Asymptotically Stable'}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 12-Step Assessment Protocol Audit -->
+            <div class="card" style="padding:1rem; background:#0d1527; border:1px solid #1e293b;">
+              <h4 style="font-size:0.88rem; color:#94a3b8; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.5rem;">12-Step Protocol Audit & Provenance</h4>
+              <div style="font-size:0.78rem; line-height:1.6; color:#94a3b8;">
+                &bull; <strong>Taxon Registry Status:</strong> Canonical ${evalData.taxonomic_status || 'EXACT_MATCH'} &bull; <strong>Native Geographic Range:</strong> ${evalData.native_range || 'N/A'}<br>
+                &bull; <strong>Site Native Baseline Stock:</strong> ${evalData.initial_native_standing_biomass_mg_ha || nativeBio} Mg/ha<br>
+                &bull; <strong>Evidence Citation:</strong> ${evalData.provenance_citation || 'Curated Silvicultural Literature'} (${evalData.provenance_agency || 'BSI & FSI'})
               </div>
             </div>
           `;
+          if (window.lucide) lucide.createIcons();
         }
       } catch (e) {
         console.error('Candidate evaluation error:', e);
+        if (evalHdrStatus) {
+          evalHdrStatus.textContent = 'EVALUATION ERROR';
+          evalHdrStatus.style.color = '#ef4444';
+        }
       } finally {
         evalBtn.disabled = false;
         evalBtn.innerHTML = '<i data-lucide="cpu"></i> <span>Execute 12-Step Risk Evaluation</span>';
@@ -1926,7 +2172,7 @@ document.addEventListener('DOMContentLoaded', () => {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
           area_id: currentAreaId,
-          species_name: 'Lantana camara'
+          species_name: selectedCandidateSpecies || 'Lantana camara'
         })
       });
       const data = await res.json();
@@ -1966,14 +2212,17 @@ document.addEventListener('DOMContentLoaded', () => {
       const res = await fetch('/api/report/reality', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({area_id: currentAreaId, species_name: 'Lantana camara'})
+        body: JSON.stringify({
+          area_id: currentAreaId,
+          species_name: selectedCandidateSpecies || 'Lantana camara'
+        })
       });
       const data = await res.json();
       const blob = new Blob([data.markdown], {type: 'text/markdown'});
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `FORESTDYN_Report_${currentAreaId}.md`;
+      a.download = `FORESTDYN_Report_${currentAreaId}_${(selectedCandidateSpecies || 'Lantana_camara').replace(/\s+/g, '_')}.md`;
       a.click();
 
     } catch (e) {
@@ -1985,6 +2234,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- Initial Boot ---
   loadProtectedAreas();
+  loadSpeciesLibrary();
   loadScenarios();
   loadSystemStatus();
 });

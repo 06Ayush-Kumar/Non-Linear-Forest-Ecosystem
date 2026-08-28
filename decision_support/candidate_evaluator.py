@@ -135,7 +135,17 @@ def evaluate_candidate_introduction(
         "evaluation_type": "MODELLED ECOLOGICAL INVASION RISK (IUCN EICAT Adapted)",
         "growth_form": record["growth_form"],
         "environmental_suitability": suitability,
-
+        "abiotic_suitability": {
+            "overall_abiotic_suitability": suitability["s_composite"],
+            "temperature_suitability": suitability.get("s_temperature", 1.0),
+            "rainfall_suitability": suitability.get("s_precipitation", 1.0),
+            "elevation_suitability": suitability.get("s_elevation", 1.0)
+        },
+        "initial_native_standing_biomass_mg_ha": site_native_biomass_mg_ha,
+        "decision_badge": {
+            "text": risk_class,
+            "color": risk_color
+        },
         "traits": {
             "max_height_m": record["max_height_m"],
             "shade_tolerance": f"{shade_tol} / 5",
@@ -154,6 +164,7 @@ def evaluate_candidate_introduction(
         "final_classification": risk_class,
         "risk_color": risk_color,
         "verdict_summary": verdict,
+        "regulatory_recommendation": "Introduction/planting strictly prohibited without formal multi-season quarantined field trials." if is_documented_invasive else ("Recommended for enrichment planting and assisted natural regeneration in native forest patches." if is_native else "Precautionary quarantine and monitoring required before any field introduction."),
         "documented_impacts": record.get("documented_ecological_impacts", []),
         "provenance_citation": record.get("provenance_source", "Curated Literature"),
         "provenance_agency": record.get("citation_agency", "Authoritative Botanical Literature")

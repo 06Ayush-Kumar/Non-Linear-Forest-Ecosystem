@@ -316,9 +316,14 @@ def evaluate_candidate():
     rain = float(data.get("rainfall_mm", 1250.0))
     native_bio = float(data.get("native_biomass_mg_ha", 158.0))
     state = data.get("state", "Tamil Nadu")
+    area_id = data.get("area_id", "mudumalai")
+    area_name = data.get("area_name", "Mudumalai Tiger Reserve")
 
     result = evaluate_candidate_introduction(sp_name, temp, elev, rain, native_bio, state)
-    record_audit_entry("Candidate Evaluator", "/api/candidate/evaluate", 200, (time.time() - t0)*1000, False, f"Evaluated candidate {sp_name}")
+    result["forest_id"] = area_id
+    result["forest_name"] = area_name
+    result["target_state"] = state
+    record_audit_entry("Candidate Evaluator", "/api/candidate/evaluate", 200, (time.time() - t0)*1000, False, f"Evaluated candidate {sp_name} for {area_id}")
     return jsonify(result)
 
 

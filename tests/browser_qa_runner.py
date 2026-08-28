@@ -503,6 +503,94 @@ def run_full_browser_qa(port=9225):
         print(f"  -> Result: {results['I_BROWSER_CONSOLE']}")
 
         # ==========================================
+        # WORKFLOW K: CANDIDATE SPECIES EVALUATION & TAXONOMY
+        # ==========================================
+        print("\n[TEST K] CANDIDATE SPECIES EVALUATION & TAXONOMY DATA FLOW AUDIT")
+        
+        # 1. Test Species Library
+        cdp.eval_js("document.querySelector('.nav-btn[data-workspace=\"species-library\"]')?.click()")
+        time.sleep(0.8)
+        spp_cards_count = cdp.eval_js("document.querySelectorAll('#species-cards-container .species-card').length") or 0
+        print(f"  Canonical Species Cards Rendered: {spp_cards_count} (Expected: 10)")
+
+        # 2. Test GBIF Occurrence Query
+        cdp.eval_js("document.getElementById('synonym-search-input').value = 'Lantana camara'")
+        cdp.eval_js("document.getElementById('btn-resolve-synonym')?.click()")
+        time.sleep(0.8)
+        gbif_text = cdp.eval_js("document.getElementById('synonym-result-box')?.innerText") or ""
+        print(f"  GBIF Field Occurrence Result: '{gbif_text[:90]}...'")
+
+        # 3. Test Candidate Species Assessment Context
+        cdp.eval_js("document.querySelector('.nav-btn[data-workspace=\"candidate-eval\"]')?.click()")
+        time.sleep(0.8)
+        
+        # Check Context Bar initial state
+        ctx_forest = cdp.eval_js("document.getElementById('eval-header-forest')?.textContent") or ""
+        ctx_candidate = cdp.eval_js("document.getElementById('eval-header-candidate')?.textContent") or ""
+        ctx_status_init = cdp.eval_js("document.getElementById('eval-header-status')?.textContent") or ""
+        print(f"  Initial Context Bar: Forest='{ctx_forest}', Candidate='{ctx_candidate}', Status='{ctx_status_init}'")
+
+        # Switch Candidate Dropdown to Dalbergia latifolia (Native)
+        cdp.eval_js("document.getElementById('eval-species-select').value = 'Dalbergia latifolia'; document.getElementById('eval-species-select').dispatchEvent(new Event('change'));")
+        time.sleep(0.4)
+        ctx_candidate_dal = cdp.eval_js("document.getElementById('eval-header-candidate')?.textContent") or ""
+        ctx_status_dal = cdp.eval_js("document.getElementById('eval-header-status')?.textContent") or ""
+        print(f"  After selecting Dalbergia latifolia: Candidate='{ctx_candidate_dal}', Status='{ctx_status_dal}'")
+
+        # Run 12-Step Evaluation for Dalbergia latifolia
+        cdp.eval_js("document.getElementById('btn-run-candidate-eval')?.click()")
+        time.sleep(1.5)
+        
+        eval_verdict_dal = cdp.eval_js("document.getElementById('eval-verdict-badge')?.textContent") or ""
+        eval_body_dal = cdp.eval_js("document.getElementById('eval-result-content')?.innerText") or ""
+        status_after_dal = cdp.eval_js("document.getElementById('eval-header-status')?.textContent") or ""
+        
+        has_dalbergia = "Dalbergia latifolia" in eval_body_dal
+        has_lantana_in_dal = "Lantana camara" in eval_body_dal
+        has_native_tag = "NATIVE" in eval_body_dal or "LOW RISK" in eval_verdict_dal
+        
+        print(f"  Dalbergia Evaluation -> Verdict: '{eval_verdict_dal}' | Status: '{status_after_dal}' | Matched Dalbergia: {has_dalbergia} | Zero Lantana Leaked: {not has_lantana_in_dal}")
+
+        # Switch Candidate Dropdown to Senna spectabilis (Invasive) and evaluate
+        cdp.eval_js("document.getElementById('eval-species-select').value = 'Senna spectabilis'; document.getElementById('eval-species-select').dispatchEvent(new Event('change'));")
+        time.sleep(0.4)
+        cdp.eval_js("document.getElementById('btn-run-candidate-eval')?.click()")
+        time.sleep(1.5)
+        
+        eval_verdict_senna = cdp.eval_js("document.getElementById('eval-verdict-badge')?.textContent") or ""
+        eval_body_senna = cdp.eval_js("document.getElementById('eval-result-content')?.innerText") or ""
+        has_senna = "Senna spectabilis" in eval_body_senna
+        has_invasive_risk = "HIGH RISK" in eval_verdict_senna or "VERY HIGH RISK" in eval_verdict_senna
+        
+        print(f"  Senna Evaluation -> Verdict: '{eval_verdict_senna}' | Matched Senna: {has_senna} | Risk Identified: {has_invasive_risk}")
+
+        # Switch Forest to Kaziranga and verify Candidate Assessment resets to AWAITING EVALUATION
+        cdp.eval_js("window.selectPaDirect('kaziranga')")
+        time.sleep(1.2)
+        ctx_forest_kazi = cdp.eval_js("document.getElementById('eval-header-forest')?.textContent") or ""
+        ctx_status_kazi = cdp.eval_js("document.getElementById('eval-header-status')?.textContent") or ""
+        verdict_badge_kazi = cdp.eval_js("document.getElementById('eval-verdict-badge')?.textContent") or ""
+        
+        print(f"  After Forest Switch to Kaziranga: Context Forest='{ctx_forest_kazi}', Status='{ctx_status_kazi}', Badge='{verdict_badge_kazi}'")
+
+        cond_k = (
+            int(spp_cards_count) == 10 and
+            "occurrences" in gbif_text.lower() and
+            "Dalbergia latifolia" in ctx_candidate_dal and
+            has_dalbergia and
+            not has_lantana_in_dal and
+            has_native_tag and
+            has_senna and
+            has_invasive_risk and
+            "Kaziranga" in ctx_forest_kazi and
+            "AWAITING EVALUATION" in ctx_status_kazi
+        )
+        results["K_CANDIDATE_TAXONOMY"] = "PASS" if cond_k else "FAIL"
+        if not cond_k:
+            error_details.append(f"K_CANDIDATE_TAXONOMY failed: spp_count={spp_cards_count}, dal={has_dalbergia}, lantana_leak={has_lantana_in_dal}, kazi_reset={ctx_status_kazi}")
+        print(f"  -> Result: {results['K_CANDIDATE_TAXONOMY']}")
+
+        # ==========================================
         # WORKFLOW J: NETWORK & API ENDPOINTS
         # ==========================================
         print("\n[TEST J] NETWORK & API INTEGRITY")

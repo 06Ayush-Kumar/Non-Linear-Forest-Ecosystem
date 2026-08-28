@@ -258,6 +258,25 @@
             <h2>Candidate Species Introduction Assessment</h2>
             <p class="subtitle">12-step process-based ecological evaluation of proposed plant introductions or invasion fronts.</p>
           </div>
+          <span class="tag-badge observed">PROCESS-BASED 12-STEP ASSESSMENT</span>
+        </div>
+
+        <!-- Explicit Assessment Context Identity Header -->
+        <div class="assessment-context-bar" id="eval-context-bar" style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; padding:12px 16px; background:#0d1527; border:1px solid #1e293b; border-radius:8px; margin-bottom:1rem;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <i data-lucide="map-pin" style="color:#38bdf8; width:18px; height:18px;"></i>
+            <span style="font-size:0.78rem; color:#8b9cb5; text-transform:uppercase; letter-spacing:0.04em;">Selected Forest:</span>
+            <strong id="eval-header-forest" style="color:#f8fafc; font-size:0.95rem;">Mudumalai Tiger Reserve, Tamil Nadu</strong>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <i data-lucide="leaf" style="color:#10b981; width:18px; height:18px;"></i>
+            <span style="font-size:0.78rem; color:#8b9cb5; text-transform:uppercase; letter-spacing:0.04em;">Selected Candidate:</span>
+            <strong id="eval-header-candidate" style="color:#f8fafc; font-size:0.95rem;">Lantana camara</strong>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:0.78rem; color:#8b9cb5; text-transform:uppercase; letter-spacing:0.04em;">Assessment Status:</span>
+            <span id="eval-header-status" class="status-badge" style="background:#64748b22; color:#94a3b8; border:1px solid #64748b44;">AWAITING EVALUATION</span>
+          </div>
         </div>
 
         <div class="eval-layout-grid">
@@ -266,26 +285,31 @@
               <div class="card-title"><i data-lucide="sliders"></i><h3>Input Candidate Species & Site Conditions</h3></div>
             </div>
             <div class="form-group">
-              <label>Select or Enter Candidate Taxon:</label>
+              <label for="eval-species-select">Candidate Taxon (from Canonical Species Library):</label>
               <select id="eval-species-select">
-                <option value="Lantana camara">Lantana camara (Wild Sage / Invasive)</option>
-                <option value="Senna spectabilis">Senna spectabilis (Calceolaria Cassia / Invasive)</option>
-                <option value="Prosopis juliflora">Prosopis juliflora (Mesquite / Invasive)</option>
-                <option value="Parthenium hysterophorus">Parthenium hysterophorus (Congress Grass / Invasive)</option>
-                <option value="Tectona grandis">Tectona grandis (Teak / Indigenous Native)</option>
-                <option value="Dalbergia latifolia">Dalbergia latifolia (Indian Rosewood / Native)</option>
+                <option value="Lantana camara">Lantana camara (Wild Sage / High-Priority Invasive)</option>
+                <option value="Senna spectabilis">Senna spectabilis (Calceolaria Cassia / High-Priority Invasive)</option>
+                <option value="Prosopis juliflora">Prosopis juliflora (Mesquite / High-Priority Invasive)</option>
+                <option value="Parthenium hysterophorus">Parthenium hysterophorus (Congress Grass / High-Priority Invasive)</option>
+                <option value="Chromolaena odorata">Chromolaena odorata (Siam Weed / High-Priority Invasive)</option>
+                <option value="Tectona grandis">Tectona grandis (Teak / Indigenous Native Timber)</option>
+                <option value="Shorea robusta">Shorea robusta (Sal / Indigenous Native Climax)</option>
+                <option value="Dalbergia latifolia">Dalbergia latifolia (Indian Rosewood / Indigenous Native)</option>
+                <option value="Terminalia tomentosa">Terminalia tomentosa (Asna / Indigenous Native Co-Dominant)</option>
+                <option value="Bambusa bambos">Bambusa bambos (Giant Thorny Bamboo / Indigenous Native)</option>
               </select>
+              <span style="font-size:0.75rem; color:#8b9cb5; display:block; margin-top:4px;">Global candidate taxa evaluated in the context of the active protected area's abiotic & biotic baseline.</span>
             </div>
             <div class="form-group">
-              <label>Mean Annual Temperature (°C):</label>
+              <label for="eval-temp">Mean Annual Temperature (°C):</label>
               <input type="number" id="eval-temp" value="24.5" step="0.5">
             </div>
             <div class="form-group">
-              <label>Annual Rainfall (mm):</label>
+              <label for="eval-rain">Annual Rainfall (mm):</label>
               <input type="number" id="eval-rain" value="1250" step="50">
             </div>
             <div class="form-group">
-              <label>Site Elevation (m):</label>
+              <label for="eval-elev">Site Elevation (m):</label>
               <input type="number" id="eval-elev" value="850" step="25">
             </div>
             <button class="btn btn-primary btn-block" id="btn-run-candidate-eval">
@@ -296,10 +320,10 @@
           <div class="card eval-result-card">
             <div class="card-header">
               <div class="card-title"><i data-lucide="award"></i><h3>Ecological Risk Verdict & Suitability Breakdown</h3></div>
-              <span class="risk-badge" id="eval-verdict-badge">EVALUATION PENDING</span>
+              <span class="risk-badge" id="eval-verdict-badge">AWAITING EVALUATION</span>
             </div>
             <div class="eval-result-body" id="eval-result-content">
-              <p class="placeholder-text">Click 'Execute 12-Step Risk Evaluation' to compute Gaussian abiotic suitability, competitive displacement, and mathematical stability.</p>
+              <p class="placeholder-text">Click 'Execute 12-Step Risk Evaluation' to compute Gaussian abiotic suitability, competitive displacement, and mathematical stability for the selected candidate.</p>
             </div>
           </div>
         </div>
