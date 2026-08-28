@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LANDIS-II India Forest Landscape Decision Support & Ecological Intelligence Workstation</title>
+  <link rel="stylesheet" href="styles.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Leaflet Interactive Maps -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- KaTeX Mathematical Typography Renderer -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+
+  <!-- Chart.js, Three.js, Lucide Icons -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.js"></script>
+</head>
+
+<body class="dark-theme">
+  <div class="app-layout">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-icon">
+          <i data-lucide="trees"></i>
+        </div>
+        <div class="brand-text">
+          <h1>LANDIS-II <span>India</span></h1>
+          <span class="badge-tag">Academic Research Workstation</span>
+        </div>
+      </div>
+
+      <nav class="nav-menu">
+        <button class="nav-btn active" data-workspace="gis-map">
+          <i data-lucide="map"></i>
+          <span>1. India GIS & Map</span>
+        </button>
+        <button class="nav-btn" data-workspace="baseline">
+          <i data-lucide="database"></i>
+          <span>2. Forest Baseline</span>
+        </button>
+        <button class="nav-btn" data-workspace="species-library">
+          <i data-lucide="book-open"></i>
+          <span>3. Species & Taxonomy</span>
+        </button>
+        <button class="nav-btn" data-workspace="candidate-eval">
+          <i data-lucide="search-check"></i>
+          <span>4. Candidate Evaluation</span>
+        </button>
+        <button class="nav-btn" data-workspace="simulation">
+          <i data-lucide="activity"></i>
+          <span>5. Reduced-Order Spatial Simulator</span>
+        </button>
+
+        <button class="nav-btn" data-workspace="stability">
+          <i data-lucide="binary"></i>
+          <span>6. Jacobian & Stability</span>
+        </button>
+        <button class="nav-btn" data-workspace="scenarios">
+          <i data-lucide="sliders"></i>
+          <span>7. Scenarios & Policy</span>
+        </button>
+        <button class="nav-btn" data-workspace="visualizer-3d">
+          <i data-lucide="box"></i>
+          <span>8. 3D Landscape Visualizer</span>
+        </button>
+        <button class="nav-btn" data-workspace="traceability">
+          <i data-lucide="shield-check"></i>
+          <span>9. Sources & Provenance</span>
+        </button>
+        <button class="nav-btn" data-workspace="system-status">
+          <i data-lucide="cpu"></i>
+          <span>10. System Reality Status</span>
+        </button>
+        <button class="nav-btn" data-workspace="report">
+          <i data-lucide="file-text"></i>
+          <span>11. Decision Report</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-status">
+        <div class="status-card">
+          <div class="status-indicator online"></div>
+          <div class="status-details">
+            <span class="status-title">LANDIS-II 7.0 Engine</span>
+            <span class="status-subtitle">Compiled & Operational</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Workspace Container -->
+    <main class="main-content">
+      <!-- Top Telemetry Header -->
+      <header class="topbar">
+        <div class="selected-forest-badge">
+          <i data-lucide="map-pin"></i>
+          <span class="lbl">Selected Forest:</span>
+          <strong id="header-forest-name">Mudumalai Tiger Reserve, Tamil Nadu</strong>
+          <span class="tag-badge" id="header-forest-type">Moist & Dry Deciduous</span>
+        </div>
+
+        <div class="top-telemetry">
+          <div class="t-pill">
+            <span class="t-lbl">Operating Mode:</span>
+            <strong id="top-operating-mode" style="color:#10b981;font-weight:700;">RESEARCH MODE (STRICT DATA)</strong>
+          </div>
+          <div class="t-pill">
+            <span class="t-lbl">Native Stock:</span>
+            <strong id="top-native-biomass">158.4 Mg/ha</strong>
+          </div>
+          <div class="t-pill">
+            <span class="t-lbl">Data Source:</span>
+            <strong id="top-confidence" class="risk-highlight">FSI ISFR 2021 & Working Plan</strong>
+          </div>
+        </div>
+      </header>
+
+
+      <!-- Workspace 1: India GIS & Interactive Area Map -->
+      <section id="ws-gis-map" class="workspace-panel active">
+        <div class="ws-header">
+          <div>
+            <h2>India Forest Landscape GIS & Area Selection</h2>
+            <p class="subtitle">Interactive spatial map of Indian Protected Areas, Tiger Reserves, and Forest Types with live Open-Meteo & SRTM DEM telemetry.</p>
+          </div>
+          <div class="search-box">
+            <i data-lucide="search"></i>
+            <input type="text" id="gis-search-input" placeholder="Search Mudumalai, Bandipur, Kanha, Gir, Corbett...">
+          </div>
+        </div>
+
+        <div class="gis-layout-grid">
+          <div class="card pa-selector-card">
+            <div class="card-header">
+              <div class="card-title"><i data-lucide="compass"></i><h3>Protected Areas & Forests Catalog</h3></div>
+            </div>
+            <div class="pa-list" id="pa-list-container">
+              <!-- Dynamically Populated -->
+            </div>
+          </div>
+
+          <div class="card pa-detail-card" style="display:flex; flex-direction:column; gap:12px;">
+            <div class="card-header">
+              <div class="card-title"><i data-lucide="map"></i><h3 id="pa-detail-title">Mudumalai Tiger Reserve</h3></div>
+              <span class="status-badge observed" id="pa-provenance-tag">AUTHENTIC FSI BASELINE</span>
+            </div>
+
+            <!-- Real Interactive Leaflet Tile Map -->
+            <div id="gis-leaflet-map" style="height: 260px; width: 100%; border-radius: 8px; border: 1px solid var(--border-color); background: #0b0f17; z-index: 1;"></div>
+
+            <div id="live-env-telemetry" style="display:flex; gap:10px; flex-wrap:wrap; margin-top:4px;">
+              <!-- Telemetry pills -->
+            </div>
+
+            <div class="pa-detail-body" id="pa-detail-content">
+              <!-- Detail fields -->
+            </div>
+
+            <div class="resolution-selector-box">
+              <label>LANDIS-II Spatial Grid Resolution:</label>
+              <select id="spatial-resolution-select">
+                <option value="100">100m &times; 100m (1 ha / cell) - Standard Landscape</option>
+                <option value="30">30m &times; 30m (Landsat / High Res)</option>
+                <option value="250">250m &times; 250m (MODIS Landscape Extent)</option>
+              </select>
+              <button class="btn btn-primary" id="btn-load-forest-baseline">
+                <i data-lucide="check-circle"></i> <span>Load Forest Baseline & Spatial Model</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Workspace 2: Forest Baseline & Species Inventory -->
+      <section id="ws-baseline" class="workspace-panel">
+        <div class="ws-header">
+          <div>
+            <h2>Forest Baseline & Species Inventory</h2>
+            <p class="subtitle">Standing biomass, carbon pools, and documented botanical species records from FSI ISFR 2021 and State Working Plans.</p>
+          </div>
+          <span class="tag-badge observed">AUTHENTIC FOREST INVENTORY DATA</span>
+        </div>
+
+        <div id="baseline-details-container" style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:16px;">
+          <!-- Populated dynamically -->
+        </div>
+
+        <div class="baseline-tables-grid">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title"><i data-lucide="leaf"></i><h3>Documented Native Canopy Species</h3></div>
+              <span class="tag-badge observed">OBSERVED TAXON REGISTRY</span>
+            </div>
+            <div class="table-wrapper">
+              <table class="data-table" id="native-species-table">
+                <thead>
+                  <tr><th>Scientific Name</th><th>Common Name</th><th>Growth Form</th><th>Status</th><th>Evidence Source</th></tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title"><i data-lucide="alert-triangle"></i><h3>Documented Invasive Species Occurrences</h3></div>
+              <span class="tag-badge observed">PUBLISHED INVASION RECORDS</span>
+            </div>
+            <div class="table-wrapper">
+              <table class="data-table" id="invasive-species-table">
+                <thead>
+                  <tr><th>Scientific Name</th><th>Common Name</th><th>Growth Form</th><th>Allelopathy</th><th>Source Citation</th></tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Workspace 3: Species Library & Canonical Taxonomy -->
+      <section id="ws-species-library" class="workspace-panel">
+        <div class="ws-header">
+          <div>
+            <h2>Species Library & Taxonomy Normalization</h2>
+            <p class="subtitle">Authoritative botanical database with GBIF occurrence resolution, functional traits, and ecological tolerances.</p>
+          </div>
+          <div class="synonym-tool">
+            <input type="text" id="synonym-search-input" placeholder="Type name (e.g. 'Lantana camara', 'Teak', 'Sagwan')...">
+            <button class="btn btn-primary" id="btn-resolve-synonym">Query GBIF Occurrences</button>
+          </div>
+        </div>
+
+        <div id="synonym-result-box" class="synonym-result-banner hidden" style="margin-bottom:16px; padding:12px; background:#131d2e; border:1px solid #38bdf8; border-radius:8px;"></div>
+
+        <div class="species-cards-grid" id="species-cards-container">
+          <!-- Populated dynamically -->
+        </div>
+      </section>
+
+      <!-- Workspace 4: Candidate Species Introduction & Risk Evaluator -->
+      <section id="ws-candidate-eval" class="workspace-panel">
+        <div class="ws-header">
+          <div>
+            <h2>Candidate Species Introduction Assessment</h2>
+            <p class="subtitle">12-step process-based ecological evaluation of proposed plant introductions or invasion fronts.</p>
+          </div>
+        </div>
+
+        <div class="eval-layout-grid">
+          <div class="card eval-input-card">
+            <div class="card-header">
+              <div class="card-title"><i data-lucide="sliders"></i><h3>Input Candidate Species & Site Conditions</h3></div>
+            </div>
+            <div class="form-group">
+              <label>Select or Enter Candidate Taxon:</label>
+              <select id="eval-species-select">
+                <option value="Lantana camara">Lantana camara (Wild Sage / Invasive)</option>
+                <option value="Senna spectabilis">Senna spectabilis (Calceolaria Cassia / Invasive)</option>
+                <option value="Prosopis juliflora">Prosopis juliflora (Mesquite / Invasive)</option>
+                <option value="Parthenium hysterophorus">Parthenium hysterophorus (Congress Grass / Invasive)</option>
+                <option value="Tectona grandis">Tectona grandis (Teak / Indigenous Native)</option>
+                <option value="Dalbergia latifolia">Dalbergia latifolia (Indian Rosewood / Native)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Mean Annual Temperature (°C):</label>
+              <input type="number" id="eval-temp" value="24.5" step="0.5">
+            </div>
+            <div class="form-group">
+              <label>Annual Rainfall (mm):</label>
+              <input type="number" id="eval-rain" value="1250" step="50">
+            </div>
+            <div class="form-group">
+              <label>Site Elevation (m):</label>
+              <input type="number" id="eval-elev" value="850" step="25">
+            </div>
+            <button class="btn btn-primary btn-block" id="btn-run-candidate-eval">
+              <i data-lucide="cpu"></i> <span>Execute 12-Step Risk Evaluation</span>
+            </button>
+          </div>
+
+          <div class="card eval-result-card">
+            <div class="card-header">
+              <div class="card-title"><i data-lucide="award"></i><h3>Ecological Risk Verdict & Suitability Breakdown</h3></div>
+              <span class="risk-badge" id="eval-verdict-badge">EVALUATION PENDING</span>
+            </div>
+            <div class="eval-result-body" id="eval-result-content">
+              <p class="placeholder-text">Click 'Execute 12-Step Risk Evaluation' to compute Gaussian abiotic suitability, competitive displacement, and mathematical stability.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Workspace 5: Reduced-Order Spatial Reaction-Diffusion Model & Layer 1 LANDIS-II Engine -->
+      <section id="ws-simulation" class="workspace-panel">
+        <div class="sim-grid-layout">
+          <div class="card sim-map-card">
+            <div class="card-header">
+              <div class="card-title">
+                <i data-lucide="grid"></i>
+                <h3>Reduced-Order Spatial Reaction-Diffusion Simulator (30 &times; 30 Grid)</h3>
+              </div>
+              <div class="sim-layer-select">
+                <label>Layer Overlay:</label>
+                <select id="sim-layer-mode">
+                  <option value="native">Native Canopy Biomass (Mg/ha)</option>
+                  <option value="invasive">Invasive Candidate Biomass (Mg/ha)</option>
+                  <option value="stability">Local Discrete Stability Class</option>
+                  <option value="priority">Management Priority Zones</option>
+                  <option value="suitability">Abiotic Environmental Suitability</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="spatial-scale-info">
+              <span class="tag-badge" style="background:#0284c722;color:#38bdf8;border:1px solid #0284c744">LAYER 3: REDUCED-ORDER SPATIAL MODEL OUTPUT</span>
+              <span class="scale-text">Grid Scale: 30 &times; 30 cells (900 ha) | Local Kinetics: 4th-Order Runge-Kutta | Spatial Diffusion: D_z &nabla;&sup2;z (0.045 ha/yr)</span>
+            </div>
+
+            <div class="canvas-box">
+              <canvas id="sim-canvas" width="560" height="560"></canvas>
+            </div>
+
+            <div class="time-machine-bar">
+              <div class="tm-controls">
+                <button class="btn btn-primary" id="btn-sim-play"><i data-lucide="play"></i> <span>Simulate</span></button>
+                <button class="btn btn-secondary" id="btn-sim-step"><i data-lucide="step-forward"></i> <span>+1 Yr</span></button>
+                <button class="btn btn-secondary" id="btn-sim-step5"><i data-lucide="fast-forward"></i> <span>+5 Yrs</span></button>
+                <button class="btn btn-danger" id="btn-sim-reset"><i data-lucide="rotate-ccw"></i> <span>Reset</span></button>
+              </div>
+              <div class="tm-timeline">
+                <label>Time Machine:</label>
+                <span id="tm-year-label" class="year-highlight">Year 0 / 30</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="sim-side-column">
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title"><i data-lucide="line-chart"></i><h3>Biomass Trajectory (Strata x, y, z)</h3></div>
+              </div>
+              <div class="chart-box-std">
+                <canvas id="simBiomassChart"></canvas>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title"><i data-lucide="zap"></i><h3>Spectral Radius Trajectory &rho;(J_map)</h3></div>
+              </div>
+              <div class="chart-box-std">
+                <canvas id="simStabilityChart"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Real LANDIS-II Execution Card -->
+        <div class="card mt-4">
+          <div class="card-header">
+            <div class="card-title">
+              <i data-lucide="terminal"></i>
+              <h3>LAYER 1: Real LANDIS-II 7.0 Process Execution (Landis.Console.exe)</h3>
+            </div>
+            <button class="btn btn-primary" id="btn-run-landis-engine">
+              <i data-lucide="play"></i> <span>Run Real LANDIS-II Simulation</span>
+            </button>
+          </div>
+          <div class="spatial-scale-info">
+            <span class="tag-badge observed">LAYER 1: LANDIS-II OUTPUT</span>
+            <span class="scale-text">Spawns Landis.Console.exe (.NET Framework 4.8 / Biomass Succession 7.2 + Output Biomass 4.1), generates 108 GeoTIFF rasters & CSV logs across 9,801 landscape cells.</span>
+          </div>
+          <pre id="landis-stdout-console" class="terminal-console" style="background:#0a0f1d;color:#10b981;padding:1rem;border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:0.75rem;max-height:220px;overflow-y:auto;margin-top:0.75rem">Click 'Run Real LANDIS-II Simulation' to execute Landis.Console.exe on scenario.txt</pre>
+        </div>
+      </section>
+
+
+      <!-- Workspace 6: Jacobian & Stability Analysis -->
+      <section id="ws-stability" class="workspace-panel">
+        <div class="ws-header">
+          <div>
+            <h2>LAYER 2: Jacobian Matrix & Local Stability Analysis</h2>
+            <p class="subtitle">Analytical continuous Jacobian J_F, discrete map J_map = I + dt*J_F, finite-difference cross-check, and equilibria.</p>
+          </div>
+          <button class="btn btn-primary" id="btn-recompute-jacobian"><i data-lucide="refresh-cw"></i> <span>Recompute Analytical & Finite Differences</span></button>
+        </div>
+
+        <div class="stability-grid-layout">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title"><i data-lucide="matrix"></i><h3>Continuous Jacobian Matrix J_F</h3></div>
+              <span class="tag-badge observed">LAYER 2: SCIENTIFIC MODEL OUTPUT</span>
+            </div>
+            <div class="matrix-display" id="continuous-jacobian-box"></div>
+          </div>
+
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title"><i data-lucide="check-square"></i><h3>Numerical Finite-Difference Verification</h3></div>
+              <span class="status-badge observed" id="verification-status-tag">PASS (&lt; 1e-4 error)</span>
+            </div>
+            <div class="verif-body" id="verification-details-box"></div>
+          </div>
+        </div>
+
+        <div class="card mt-4">
+          <div class="card-header">
+            <div class="card-title"><i data-lucide="git-commit"></i><h3>System Equilibria States F(x*) = 0</h3></div>
+          </div>
+          <div class="table-wrapper">
+            <table class="data-table" id="equilibria-table">
+              <thead>
+                <tr><th>Equilibrium State Name</th><th>Type</th><th>State Vector [x*, y*, z*] (Mg/ha)</th><th>Biological Interpretation</th></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card mt-4">
+          <div class="card-header">
+            <div class="card-title">
+              <i data-lucide="sliders"></i>
+              <h3>Interactive State Vector Eigenvalue & Spectral Radius Calculator</h3>
+            </div>
+            <button class="btn btn-primary" id="btn-calc-stability">
+              <i data-lucide="cpu"></i> <span>Calculate Stability Metrics</span>
+            </button>
+          </div>
+          <div class="eval-layout-grid" style="grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 0.75rem;">
+            <div>
+              <div class="form-group">
+                <label>Native Climax Canopy Biomass x (Mg/ha):</label>
+                <input type="number" id="input-state-x" value="120.0" step="5">
+              </div>
+              <div class="form-group">
+                <label>Understory / Shrub Biomass y (Mg/ha):</label>
+                <input type="number" id="input-state-y" value="30.0" step="2">
+              </div>
+              <div class="form-group">
+                <label>Invasive / Candidate Biomass z (Mg/ha):</label>
+                <input type="number" id="input-state-z" value="10.0" step="1">
+              </div>
+            </div>
+            <div id="stability-results-container">
+              <p class="placeholder-text">Adjust state vector above and click 'Calculate Stability Metrics'.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Workspace 7: Scenarios & Management Optimization -->
+      <section id="ws-scenarios" class="workspace-panel">
+        <div class="ws-header">
+          <div>
+            <h2>10 Standardized Management Scenarios Comparison</h2>
+            <p class="subtitle">All scenarios evaluated from the identical initial baseline state over 30 simulated years.</p>
+          </div>
+          <button class="btn btn-primary" id="btn-run-all-scenarios"><i data-lucide="play-circle"></i> <span>Run Multi-Scenario Comparison</span></button>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><i data-lucide="list-ordered"></i><h3>Scenario Policy Rankings (Sorted by Ecological Risk / IIS)</h3></div>
+          </div>
+          <div class="table-wrapper">
+            <table class="data-table" id="scenarios-ranking-table">
+              <thead>
+                <tr><th>Rank</th><th>Scenario Policy Name</th><th>Final Native Biomass</th><th>Final Invasive Cover</th><th>Spectral Radius</th><th>Invasive Impact Score (IIS)</th><th>Risk Tier</th></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card mt-4">
+          <div class="card-header">
+            <div class="card-title"><i data-lucide="wrench"></i><h3>Prescriptive Forestry Management Strategies</h3></div>
+            <span class="tag-badge observed">AUTHENTIC SILVICULTURAL PROTOCOLS</span>
+          </div>
+          <div class="solutions-grid" id="solutions-container"></div>
+        </div>
+      </section>
+
+      <!-- Workspace 8: 3D Landscape Visualizer -->
+      <section id="ws-visualizer-3d" class="workspace-panel">
+        <div class="ws-header">
+          <div>
+            <h2>3D Forest Landscape Visualizer</h2>
+            <p class="subtitle">Interactive Three.js mesh with OrbitControls representing terrain elevation, native canopy density, and invasive clusters.</p>
+          </div>
+          <span class="tag-badge observed">3D MESH VISUALIZATION (DRAG TO ROTATE, SCROLL TO ZOOM)</span>
+        </div>
+
+        <div class="threejs-wrapper" id="threejs-container" style="height: 540px; width: 100%; border-radius: 8px; border: 1px solid var(--border-color); background: #0a0f1d; position: relative;">
+          <div class="three-overlay-legend" style="position:absolute; top:12px; left:12px; background:rgba(13,18,28,0.85); padding:10px; border-radius:6px; border:1px solid var(--border-color); z-index:10;">
+            <div class="leg-item" style="display:flex; align-items:center; gap:6px; margin-bottom:4px; font-size:0.8rem;"><span class="color-box green" style="width:12px; height:12px; background:#10b981; border-radius:2px;"></span> Native Canopy Trees</div>
+            <div class="leg-item" style="display:flex; align-items:center; gap:6px; margin-bottom:4px; font-size:0.8rem;"><span class="color-box yellow" style="width:12px; height:12px; background:#eab308; border-radius:2px;"></span> Understory Layer</div>
+            <div class="leg-item" style="display:flex; align-items:center; gap:6px; font-size:0.8rem;"><span class="color-box red" style="width:12px; height:12px; background:#ef4444; border-radius:2px;"></span> Invasive Thickets</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Workspace 9: Sources & Traceability Audit -->
+      <section id="ws-traceability" class="workspace-panel">
+        <div class="ws-header">
+          <div>
+            <h2>Data Provenance & Live API Audit Log</h2>
+            <p class="subtitle">Full chain-of-custody tracking for all empirical observations, climatologies, and API calls.</p>
+          </div>
+          <button class="btn btn-secondary" id="btn-refresh-audit-logs"><i data-lucide="refresh-cw"></i> <span>Refresh Audit Logs</span></button>
+        </div>
+
+        <div class="traceability-grid">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title"><i data-lucide="shield-check"></i><h3>Scientific Variable Provenance Chains</h3></div>
+            </div>
+            <div class="provenance-chains-list" id="prov-chains-container">
+              <!-- Populated dynamically -->
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title"><i data-lucide="terminal"></i><h3>External API Request Audit Log</h3></div>
+            </div>
+            <div class="table-wrapper">
+              <table class="data-table" id="api-audit-table">
+                <thead>
+                  <tr><th>Timestamp</th><th>Provider</th><th>Endpoint</th><th>Status</th><th>Latency</th><th>Cache State</th></tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Workspace 10: System Reality Status -->
+      <section id="ws-system-status" class="workspace-panel">
+        <div class="ws-header">
+          <div>
+            <h2>Technical & Scientific Reality Status</h2>
+            <p class="subtitle">Comprehensive verification of all 10 architectural components against strict scientific reality standards.</p>
+          </div>
+        </div>
+
+        <div class="status-grid-reality" id="reality-status-container" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:14px;">
+          <!-- Populated dynamically from /api/reality/status -->
+        </div>
+      </section>
+
+      <!-- Workspace 11: Decision Report Exporter -->
+      <section id="ws-report" class="workspace-panel">
+        <div class="ws-header">
+          <div>
+            <h2>Official Academic & Forestry Decision Report</h2>
+            <p class="subtitle">Standardized decision-support report with executive summary, mathematical formulation, stability proofs, and scenario rankings.</p>
+          </div>
+          <div class="report-export-actions">
+            <button class="btn btn-primary" id="btn-export-markdown"><i data-lucide="download"></i> <span>Export Markdown (.md)</span></button>
+            <button class="btn btn-secondary" id="btn-print-report"><i data-lucide="printer"></i> <span>Print / Save PDF</span></button>
+          </div>
+        </div>
+
+        <div class="card report-paper-card">
+          <div id="report-rendered-view" class="report-content">
+            <!-- Rendered Clean Mathematical Report -->
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

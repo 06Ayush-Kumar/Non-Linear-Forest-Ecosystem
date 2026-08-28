@@ -1,0 +1,27 @@
+# Exclude python cache & test artifacts
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.coverage
+htmlcov
+
+# Exclude generated simulation outputs
+runs/landis_sim_*
+runs/test_fresh_*
+runs/temp_*
+runs/*/output/
+runs/*/outputs/
+runs/*/*.tif
+!runs/test_run_biomass_v7/ecoregions.tif
+!runs/test_run_biomass_v7/*.txt
+!runs/test_run_biomass_v7/*.csv
+
+# Exclude local caches & dev configs
+data_layer/.cache/*.json
+.git
+.gitignore
+.vscode
+.idea
+*.log

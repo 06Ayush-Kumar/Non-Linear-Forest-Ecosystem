@@ -1,0 +1,6 @@
+# Production Requirements for LANDIS-II India Forest Landscape Workstation
+Flask>=3.0.0
+numpy>=1.24.0
+gunicorn>=21.2.0
+waitress>=3.0.0
+pytest>=8.0.0

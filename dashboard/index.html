@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LANDIS-II Forest Landscape Simulation & Disturbance System</title>
+  <link rel="stylesheet" href="styles.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.js"></script>
+</head>
+<body class="dark-theme">
+  <div class="app-layout">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-icon">
+          <i data-lucide="trees"></i>
+        </div>
+        <div class="brand-text">
+          <h1>LANDIS-II</h1>
+          <span class="badge">v7.2 Pro Simulation</span>
+        </div>
+      </div>
+
+      <nav class="nav-menu">
+        <button class="nav-btn active" data-tab="simulator">
+          <i data-lucide="activity"></i>
+          <span>Landscape Simulator</span>
+        </button>
+        <button class="nav-btn" data-tab="analytics">
+          <i data-lucide="line-chart"></i>
+          <span>Biomass & Carbon Analytics</span>
+        </button>
+        <button class="nav-btn" data-tab="disturbances">
+          <i data-lucide="flame"></i>
+          <span>Disturbance Engine</span>
+        </button>
+        <button class="nav-btn" data-tab="scenarios">
+          <i data-lucide="folder-tree"></i>
+          <span>Ecoregions & Scenarios</span>
+        </button>
+        <button class="nav-btn" data-tab="architecture">
+          <i data-lucide="cpu"></i>
+          <span>Core Architecture & DLLs</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-status">
+        <div class="status-card">
+          <div class="status-indicator online"></div>
+          <div class="status-details">
+            <span class="status-title">Simulation Core</span>
+            <span class="status-subtitle">Engine Active (.NET / C#)</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- Top Header / Telemetry Bar -->
+      <header class="topbar">
+        <div class="sim-clock">
+          <div class="clock-badge">
+            <i data-lucide="calendar"></i>
+            <span class="clock-label">Simulated Year:</span>
+            <span id="current-year-display" class="year-val">Year 0</span>
+          </div>
+          <div class="clock-badge">
+            <i data-lucide="map-pin"></i>
+            <span class="clock-label">Landscape Extent:</span>
+            <span class="extent-val">Lake Tahoe Basin (25,000 ha)</span>
+          </div>
+        </div>
+
+        <div class="top-controls">
+          <div class="sim-actions">
+            <button id="btn-play" class="btn btn-primary">
+              <i data-lucide="play"></i> <span>Run Simulation</span>
+            </button>
+            <button id="btn-step" class="btn btn-secondary">
+              <i data-lucide="step-forward"></i> <span>Step 1 Year</span>
+            </button>
+            <button id="btn-step5" class="btn btn-secondary">
+              <i data-lucide="fast-forward"></i> <span>Step 5 Yrs</span>
+            </button>
+            <button id="btn-reset" class="btn btn-danger">
+              <i data-lucide="rotate-ccw"></i> <span>Reset</span>
+            </button>
+          </div>
+
+          <div class="speed-control">
+            <label for="sim-speed">Speed:</label>
+            <input type="range" id="sim-speed" min="100" max="1500" value="600" step="100">
+            <span id="speed-label">Normal</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- Tab: Simulator -->
+      <section id="tab-simulator" class="tab-panel active">
+        <div class="dashboard-grid">
+          <!-- Left: Canvas Landscape Raster -->
+          <div class="card map-container">
+            <div class="card-header">
+              <div class="card-title">
+                <i data-lucide="map"></i>
+                <h2>Dynamic Spatial Grid (50 &times; 50 Cells)</h2>
+              </div>
+              <div class="map-layer-selector">
+                <label>Active Raster View:</label>
+                <select id="map-view-mode">
+                  <option value="biomass">Total Biomass Density (g/m²)</option>
+                  <option value="species">Dominant Tree Species</option>
+                  <option value="disturbance">Disturbance Overlay (Fire/Harvest/BDA)</option>
+                  <option value="ecoregions">Ecoregion & Elevation Zones</option>
+                  <option value="carbon">Net Carbon Sequestration (Mg C/ha)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="canvas-wrapper">
+              <canvas id="landscape-canvas" width="600" height="600"></canvas>
+              <div id="cell-hover-card" class="cell-tooltip hidden">
+                <div class="tooltip-header" id="tt-coords">Cell [0, 0]</div>
+                <div class="tooltip-body">
+                  <p><strong>Ecoregion:</strong> <span id="tt-ecoregion">Montane Conifer</span></p>
+                  <p><strong>Dominant Species:</strong> <span id="tt-species">Ponderosa Pine</span></p>
+                  <p><strong>Total Biomass:</strong> <span id="tt-biomass">14,200 g/m²</span></p>
+                  <p><strong>Cohorts:</strong> <span id="tt-cohorts">15y, 45y, 110y</span></p>
+                  <p><strong>Fuel Load:</strong> <span id="tt-fuel">Moderate (7.2 t/ha)</span></p>
+                  <p><strong>Status:</strong> <span id="tt-status">Healthy</span></p>
+                </div>
+              </div>
+            </div>
+
+            <div class="legend-bar" id="map-legend">
+              <!-- Dynamically populated via JS -->
+            </div>
+          </div>
+
+          <!-- Right: Telemetry & Triggers -->
+          <div class="side-panel-column">
+            <!-- Key Metrics Cards -->
+            <div class="metrics-row">
+              <div class="metric-card">
+                <div class="metric-icon green">
+                  <i data-lucide="leaf"></i>
+                </div>
+                <div class="metric-data">
+                  <span class="m-label">Avg Biomass</span>
+                  <span class="m-value" id="metric-avg-biomass">12,450 <small>g/m²</small></span>
+                  <span class="m-trend positive" id="metric-biomass-trend">&uarr; +2.4% / yr</span>
+                </div>
+              </div>
+
+              <div class="metric-card">
+                <div class="metric-icon orange">
+                  <i data-lucide="flame"></i>
+                </div>
+                <div class="metric-data">
+                  <span class="m-label">Burned Extent</span>
+                  <span class="m-value" id="metric-burned-ha">0 <small>ha</small></span>
+                  <span class="m-trend" id="metric-fire-risk">Low Fire Danger</span>
+                </div>
+              </div>
+
+              <div class="metric-card">
+                <div class="metric-icon blue">
+                  <i data-lucide="cloud-rain"></i>
+                </div>
+                <div class="metric-data">
+                  <span class="m-label">Carbon Sequestered</span>
+                  <span class="m-value" id="metric-carbon">312.4 <small>kt C</small></span>
+                  <span class="m-trend positive">Active Sink</span>
+                </div>
+              </div>
+
+              <div class="metric-card">
+                <div class="metric-icon purple">
+                  <i data-lucide="shield-alert"></i>
+                </div>
+                <div class="metric-data">
+                  <span class="m-label">Defoliated / BDA</span>
+                  <span class="m-value" id="metric-bda-pct">0.0 <small>%</small></span>
+                  <span class="m-trend" id="metric-bda-status">Endemic Level</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Manual Disturbance Injector -->
+            <div class="card trigger-card">
+              <div class="card-header">
+                <div class="card-title">
+                  <i data-lucide="zap"></i>
+                  <h3>Interactive Disturbance Events</h3>
+                </div>
+              </div>
+              <div class="trigger-buttons">
+                <button id="trigger-fire" class="btn btn-fire">
+                  <i data-lucide="flame"></i>
+                  <span>Ignite Wildfire</span>
+                </button>
+                <button id="trigger-bda" class="btn btn-bda">
+                  <i data-lucide="bug"></i>
+                  <span>Trigger Bark Beetle Outbreak</span>
+                </button>
+                <button id="trigger-harvest" class="btn btn-harvest">
+                  <i data-lucide="axe"></i>
+                  <span>Execute Harvest Cut</span>
+                </button>
+                <button id="trigger-wind" class="btn btn-wind">
+                  <i data-lucide="wind"></i>
+                  <span>Simulate Windthrow Event</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Mini Live Chart -->
+            <div class="card chart-card-compact">
+              <div class="card-header">
+                <div class="card-title">
+                  <i data-lucide="trending-up"></i>
+                  <h3>Biomass & Disturbance Timeline</h3>
+                </div>
+              </div>
+              <div class="chart-box">
+                <canvas id="miniBiomassChart"></canvas>
+              </div>
+            </div>
+
+            <!-- Event Console Log -->
+            <div class="card log-card">
+              <div class="card-header">
+                <div class="card-title">
+                  <i data-lucide="terminal"></i>
+                  <h3>Core Event Logger</h3>
+                </div>
+                <button id="clear-logs" class="btn-text">Clear</button>
+              </div>
+              <div class="log-stream" id="event-logs">
+                <div class="log-entry info"><span class="log-time">[Year 0]</span> LANDIS-II Core v7.2 simulation grid initialized (2500 active landscape sites).</div>
+                <div class="log-entry success"><span class="log-time">[Year 0]</span> Loaded Biomass Succession v6.0 cohorts & Lake Tahoe spatial rasters.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab: Analytics -->
+      <section id="tab-analytics" class="tab-panel">
+        <div class="analytics-layout">
+          <div class="card chart-card-large">
+            <div class="card-header">
+              <div class="card-title">
+                <i data-lucide="line-chart"></i>
+                <h2>Species Cohort Abundance & Competition Trajectory</h2>
+              </div>
+            </div>
+            <div class="chart-box-large">
+              <canvas id="speciesAbundanceChart"></canvas>
+            </div>
+          </div>
+
+          <div class="analytics-grid-two">
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">
+                  <i data-lucide="bar-chart-3"></i>
+                  <h3>Disturbance Footprint By Type</h3>
+                </div>
+              </div>
+              <div class="chart-box">
+                <canvas id="disturbanceBreakdownChart"></canvas>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">
+                  <i data-lucide="pie-chart"></i>
+                  <h3>Current Dominant Forest Composition</h3>
+                </div>
+              </div>
+              <div class="chart-box">
+                <canvas id="compositionPieChart"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab: Disturbances -->
+      <section id="tab-disturbances" class="tab-panel">
+        <div class="disturbances-grid">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">
+                <i data-lucide="flame"></i>
+                <h2>Dynamic Fire System (v3.1)</h2>
+              </div>
+            </div>
+            <div class="disturbance-config">
+              <div class="form-group">
+                <label>Ignition Probability Parameter:</label>
+                <input type="range" id="param-fire-prob" min="0.001" max="0.05" step="0.002" value="0.015">
+                <span class="val-badge" id="val-fire-prob">0.015 / cell / yr</span>
+              </div>
+              <div class="form-group">
+                <label>Wind Direction Sensitivity:</label>
+                <select id="param-wind-dir">
+                  <option value="SW">South-West (Prevailing)</option>
+                  <option value="W">West</option>
+                  <option value="NW">North-West</option>
+                  <option value="E">East / Foehn Winds</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Fuel Consumption Model:</label>
+                <select id="param-fuel-model">
+                  <option value="dynamic">Dynamic Fine & Coarse Woody Debris</option>
+                  <option value="standard">Standard Rothermel Fuel Beds</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">
+                <i data-lucide="bug"></i>
+                <h2>Biological Disturbance Agent (BDA v3.0)</h2>
+              </div>
+            </div>
+            <div class="disturbance-config">
+              <div class="form-group">
+                <label>Host Vulnerability Threshold (Pine Beetle):</label>
+                <input type="range" id="param-bda-thresh" min="20" max="80" step="5" value="40">
+                <span class="val-badge" id="val-bda-thresh">Cohorts > 40 yrs</span>
+              </div>
+              <div class="form-group">
+                <label>Outbreak Cycling Frequency:</label>
+                <select id="param-bda-cycle">
+                  <option value="12">12-Year Epidemic Wave</option>
+                  <option value="8">8-Year High Frequency</option>
+                  <option value="20">20-Year Decadal Pulse</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">
+                <i data-lucide="axe"></i>
+                <h2>Base Harvest Management (v2.2)</h2>
+              </div>
+            </div>
+            <div class="disturbance-config">
+              <div class="form-group">
+                <label>Silvicultural Prescription:</label>
+                <select id="param-harvest-presc">
+                  <option value="thinning">Thinning from Below (Fuel Reduction)</option>
+                  <option value="group">Group Selection (Uneven-aged)</option>
+                  <option value="clearcut">Even-aged Patch Clearcut</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Harvest Stand Rotation Period:</label>
+                <span class="val-badge">Every 20 Simulated Years</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab: Scenarios -->
+      <section id="tab-scenarios" class="tab-panel">
+        <div class="scenarios-view">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">
+                <i data-lucide="folder-tree"></i>
+                <h2>Sample Scenario Explorer (Lake Tahoe & Teaching Labs)</h2>
+              </div>
+            </div>
+            <div class="file-browser-grid">
+              <div class="file-tree-col">
+                <h3>Scenario Input Files</h3>
+                <ul class="file-list">
+                  <li class="file-item active" data-file="scenario.txt"><i data-lucide="file-text"></i> scenario.txt</li>
+                  <li class="file-item" data-file="species.txt"><i data-lucide="file-text"></i> species.txt</li>
+                  <li class="file-item" data-file="ecoregions.txt"><i data-lucide="file-text"></i> ecoregions.txt</li>
+                  <li class="file-item" data-file="biomass-succession.txt"><i data-lucide="file-text"></i> biomass-succession.txt</li>
+                  <li class="file-item" data-file="dynamic-fire.txt"><i data-lucide="file-text"></i> dynamic-fire.txt</li>
+                </ul>
+              </div>
+              <div class="file-content-col">
+                <div class="file-content-header">
+                  <span id="active-file-name" class="code-badge">scenario.txt</span>
+                </div>
+                <pre id="file-viewer-content" class="code-box"><code>LandisData  "Scenario"
+
+Duration            100
+Species             species.txt
+Ecoregions          ecoregions.txt
+EcoregionsMap       ecoregions.gis
+CellLength          100  << 100 meters per cell side (1 ha/cell)
+
+<< Succession Extension
+Succession          "Biomass Succession"    biomass-succession.txt
+
+<< Disturbance Extensions
+DisturbancesRandomOrder  yes
+Disturbance         "Dynamic Fire System"   dynamic-fire.txt
+Disturbance         "Base Harvest"          harvest.txt
+Disturbance         "Biomass BDA"           bda.txt
+
+<< Output Extensions
+Output              "Output Biomass"        output-biomass.txt
+</code></pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab: Architecture -->
+      <section id="tab-architecture" class="tab-panel">
+        <div class="architecture-container">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">
+                <i data-lucide="cpu"></i>
+                <h2>LANDIS-II Architecture & Cloned Modules</h2>
+              </div>
+            </div>
+            <div class="arch-modules-grid">
+              <div class="arch-card">
+                <div class="arch-badge">Core Engine</div>
+                <h3>LANDIS-II Core v7</h3>
+                <p>Landscape grid manager, multi-threaded cohort iteration engine, dynamic plug-in loader.</p>
+                <div class="arch-meta"><code>Landis2_Project/core/Core-Model-v7</code></div>
+              </div>
+
+              <div class="arch-card">
+                <div class="arch-badge">Spatial Engine</div>
+                <h3>Library.Spatial (GDAL)</h3>
+                <p>High-performance GeoTIFF / ERDAS Imagine raster reader/writer, coordinate system transforms.</p>
+                <div class="arch-meta"><code>Landis2_Project/libraries/Library-Spatial</code></div>
+              </div>
+
+              <div class="arch-card">
+                <div class="arch-badge">Succession</div>
+                <h3>NECN & Biomass Succession</h3>
+                <p>Simulates cohort net primary productivity (NPP), soil carbon/nitrogen dynamics, and shade competition.</p>
+                <div class="arch-meta"><code>Landis2_Project/extensions/succession</code></div>
+              </div>
+
+              <div class="arch-card">
+                <div class="arch-badge">Disturbances</div>
+                <h3>Dynamic Fire, BDA & Harvest</h3>
+                <p>Coupled disturbance mechanisms simulating fuel consumption, wildfire spreads, defoliators, and harvests.</p>
+                <div class="arch-meta"><code>Landis2_Project/extensions/disturbance</code></div>
+              </div>
+
+              <div class="arch-card">
+                <div class="arch-badge">Libraries</div>
+                <h3>Support DLLs & Climate</h3>
+                <p>Precompiled assemblies including <code>Landis.Library.BiomassCohorts</code>, <code>Landis.Library.Climate</code>.</p>
+                <div class="arch-meta"><code>Landis2_Project/libraries/Support-Library-Dlls-v7</code></div>
+              </div>
+
+              <div class="arch-card">
+                <div class="arch-badge">Tools</div>
+                <h3>LANDVIZ Visualizer</h3>
+                <p>Full 2D/3D landscape raster output rendering and time-lapse animation suite.</p>
+                <div class="arch-meta"><code>Landis2_Project/tools/Tool-LANDVIZ</code></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
