@@ -37,6 +37,27 @@ def create_app() -> Flask:
     def index():
         return send_from_directory(FRONTEND, "index.html")
 
+    @app.errorhandler(404)
+    def handle_404(e):
+        from flask import request
+        if request.path.startswith("/api/"):
+            return jsonify({"error": "Endpoint not found", "path": request.path, "status": 404}), 404
+        return send_from_directory(FRONTEND, "index.html")
+
+    @app.errorhandler(500)
+    def handle_500(e):
+        from flask import request
+        if request.path.startswith("/api/"):
+            return jsonify({"error": "Internal server error", "detail": str(e), "status": 500}), 500
+        return "Internal Server Error", 500
+
+    @app.errorhandler(Exception)
+    def handle_exception(e):
+        from flask import request
+        if request.path.startswith("/api/"):
+            return jsonify({"error": "Unhandled API exception", "detail": str(e), "status": 500}), 500
+        return "Internal Server Error", 500
+
     @app.get("/health")
     @app.get("/api/health")
     def health_check():

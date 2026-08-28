@@ -119,29 +119,58 @@ def reality_status():
 def run_landis():
     """
     Executes real LANDIS-II simulation, parses outputs, and evaluates stability trajectory.
+    Guaranteed to return application/json under all execution conditions.
     """
     t0 = time.time()
-    data = request.get_json() or {}
-    run_dir = data.get("working_dir", "runs/test_run_biomass_v7")
-    scenario_file = data.get("scenario_file", "scenario.txt")
-    suitability = float(data.get("suitability", 0.85))
-    stress = float(data.get("stress", 0.15))
-    pressure = float(data.get("invasive_pressure", 1.0))
-    dt = float(data.get("dt", 0.1))
+    try:
+        data = request.get_json(silent=True) or {}
+        run_dir = data.get("working_dir", "runs/test_run_biomass_v7")
+        scenario_file = data.get("scenario_file", "scenario.txt")
+        suitability = float(data.get("suitability", 0.85))
+        stress = float(data.get("stress", 0.15))
+        pressure = float(data.get("invasive_pressure", 1.0))
+        dt = float(data.get("dt", 0.1))
+        area_id = data.get("area_id", "mudumalai")
 
-    res = run_coupled_landis_stability_pipeline(
-        scenario_path=scenario_file,
-        working_dir=run_dir,
-        suitability=suitability,
-        stress=stress,
-        invasive_pressure=pressure,
-        dt=dt,
-        create_isolated_dir=True
-    )
+        res = run_coupled_landis_stability_pipeline(
+            scenario_path=scenario_file,
+            working_dir=run_dir,
+            suitability=suitability,
+            stress=stress,
+            invasive_pressure=pressure,
+            dt=dt,
+            create_isolated_dir=True,
+            area_id=area_id
+        )
 
+        record_audit_entry(
+            "LANDIS-II Coupling Pipeline",
+            "/api/landis/run",
+            200 if res.get("success") else 500,
+            (time.time() - t0)*1000,
+            False,
+            f"Executed LANDIS-II on {scenario_file}"
+        )
+        return jsonify(res), (200 if res.get("success") else 200)
+    except Exception as e:
+        import traceback
+        err_msg = str(e)
+        stack = traceback.format_exc()
+        print(f"[API ERROR /api/landis/run] {err_msg}\n{stack}", flush=True)
+        return jsonify({
+            "success": False,
+            "error": f"Native Landscape Engine execution error: {err_msg}",
+            "execution": {
+                "success": False,
+                "return_code": -1,
+                "error": err_msg,
+                "stdout": "",
+                "stderr": stack,
+                "duration_seconds": round(time.time() - t0, 2)
+            },
+            "stability_trajectory": []
+        }), 200
 
-    record_audit_entry("LANDIS-II Coupling Pipeline", "/api/landis/run", 200 if res.get("success") else 500, (time.time() - t0)*1000, False, f"Executed LANDIS-II on {scenario_file}")
-    return jsonify(res)
 
 
 @api.route("/gis/areas", methods=["GET"])

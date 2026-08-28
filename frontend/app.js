@@ -937,34 +937,89 @@ document.addEventListener('DOMContentLoaded', () => {
       const timeoutId = setTimeout(() => controller.abort(), 150000); // 150s timeout
 
       try {
+        const payload = {
+          working_dir: 'runs/test_run_biomass_v7',
+          scenario_file: 'scenario.txt',
+          suitability: 0.88,
+          stress: 0.12,
+          invasive_pressure: 1.0,
+          dt: 0.1,
+          area_id: currentAreaId || 'mudumalai'
+        };
+
         const res = await fetch('/api/landis/run', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({
-            working_dir: 'runs/test_run_biomass_v7',
-            scenario_file: 'scenario.txt',
-            suitability: 0.88,
-            stress: 0.12,
-            invasive_pressure: 1.0,
-            dt: 0.1
-          }),
+          body: JSON.stringify(payload),
           signal: controller.signal
         });
         clearTimeout(timeoutId);
         clearInterval(runTimer);
 
-        if (outputConsole) {
-          outputConsole.textContent += `[STATE 3/5: PARSING] Parsing output CSV logs and GeoTIFF raster maps...\n` +
-            `[STATE 4/5: ANALYZING] Evaluating continuous/discrete Jacobian & spectral radius stability...\n`;
-          outputConsole.scrollTop = outputConsole.scrollHeight;
+        const contentType = res.headers.get('content-type') || '';
+        let result = null;
+        let parsingError = null;
+
+        if (contentType.includes('application/json')) {
+          try {
+            result = await res.json();
+          } catch (jsonErr) {
+            parsingError = `Failed to parse response JSON: ${jsonErr.message}`;
+          }
+        } else {
+          const rawText = await res.text();
+          const cleanText = rawText.slice(0, 250).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+          parsingError = `Server returned non-JSON response (HTTP ${res.status}): "${cleanText || 'No error message provided'}"`;
         }
 
-        const result = await res.json();
-        console.log('[Native Engine UI] Received response:', result);
+        if (parsingError) {
+          console.error('[Native Engine UI] Response Error:', parsingError);
+          if (outputConsole) {
+            outputConsole.textContent += `\n=== [STATE: FAILED] SERVER COMMUNICATION ERROR ===\n` +
+              `Status: ${parsingError}\n` +
+              `Note: The Layer 2/3 Reduced-Order Spatial Simulator remains fully operational.\n`;
+            outputConsole.scrollTop = outputConsole.scrollHeight;
+          }
+          if (resultsPanel) {
+            const elStat = document.getElementById('res-exec-status');
+            if (elStat) { elStat.textContent = `HTTP ${res.status} ERROR`; elStat.style.color = '#ef4444'; }
+            const elDur = document.getElementById('res-exec-duration');
+            if (elDur) elDur.textContent = `${runSeconds}s`;
+            const elYears = document.getElementById('res-sim-years');
+            if (elYears) elYears.textContent = 'NOT AVAILABLE';
+            const elRasters = document.getElementById('res-raster-count');
+            if (elRasters) elRasters.textContent = '0 GeoTIFF files';
+            const elTraj = document.getElementById('res-traj-count');
+            if (elTraj) elTraj.textContent = '0 records';
+            const elNat = document.getElementById('res-final-native');
+            if (elNat) elNat.textContent = 'NOT AVAILABLE';
+            const elUnd = document.getElementById('res-final-understory');
+            if (elUnd) elUnd.textContent = 'NOT AVAILABLE';
+            const elInv = document.getElementById('res-final-invasive');
+            if (elInv) elInv.textContent = 'NOT AVAILABLE';
+            const elRho = document.getElementById('res-final-rho');
+            if (elRho) elRho.textContent = 'NOT AVAILABLE';
+            const stabEl = document.getElementById('res-stability-class');
+            if (stabEl) { stabEl.textContent = 'COMMUNICATION_ERROR'; stabEl.style.color = '#ef4444'; }
+            const badgeEl = document.getElementById('landis-results-badge');
+            if (badgeEl) { badgeEl.className = 'tag-badge unstable'; badgeEl.textContent = 'FAILED'; }
+            resultsPanel.style.display = 'block';
+          }
+          return;
+        }
+
+        console.log('[Native Engine UI] Received response payload:', result);
 
         if (result && result.success) {
+          // State 3 & 4: PARSING & ANALYZING succeeded
+          if (outputConsole) {
+            outputConsole.textContent += `[STATE 3/5: PARSING] Parsed output CSV logs and GeoTIFF raster maps successfully.\n` +
+              `[STATE 4/5: ANALYZING] Evaluated continuous/discrete Jacobian & spectral radius stability across all time points.\n`;
+            outputConsole.scrollTop = outputConsole.scrollHeight;
+          }
+
           // State 5: COMPLETED
-          const dur = result.execution?.duration_seconds ?? 'N/A';
+          const dur = result.execution?.duration_seconds ?? runSeconds;
           const rCount = result.parsed_output?.raster_maps_count ?? (result.parsed_output?.raster_maps || []).length ?? 0;
           const traj = result.stability_trajectory || [];
           const trajLen = traj.length;
@@ -987,7 +1042,6 @@ document.addEventListener('DOMContentLoaded', () => {
           const finalInv = typeof finalInvVal === 'number' ? finalInvVal.toFixed(1) : 'NOT AVAILABLE';
           const isStable = typeof finalRho === 'number' ? finalRho < 1.0 : (result.summary?.overall_stability === 'STABLE');
           const stabClass = isStable ? 'STABLE (ρ < 1.0)' : 'UNSTABLE / CRITICAL (ρ ≥ 1.0)';
-
 
           if (outputConsole) {
             outputConsole.textContent += `\n=== [STATE 5/5: COMPLETED] NATIVE LANDSCAPE SIMULATION COMPLETE (Duration: ${dur}s) ===\n` +
@@ -1037,22 +1091,23 @@ document.addEventListener('DOMContentLoaded', () => {
             resultsPanel.style.display = 'block';
           }
         } else {
-          // State: FAILED
-          const err = result?.error || 'Execution returned non-zero exit code or error status';
+          // State: FAILED / UNAVAILABLE
+          const err = result?.error || 'Native engine returned execution error or non-zero exit code';
           const stderr = result?.execution?.stderr || result?.stderr || '(No stderr logged)';
-          const dur = result?.execution?.duration_seconds ?? 'N/A';
+          const dur = result?.execution?.duration_seconds ?? runSeconds;
           const simId = result?.simulation_id || 'N/A';
 
           if (outputConsole) {
-            outputConsole.textContent += `\n=== [STATE: FAILED] NATIVE LANDSCAPE SIMULATION FAILED ===\n` +
+            outputConsole.textContent += `\n=== [STATE: FAILED] NATIVE LANDSCAPE ENGINE NOTICE ===\n` +
               `Status: ${err}\n` +
-              (stderr && stderr !== '(No stderr logged)' ? `STDERR:\n${stderr}\n` : '');
+              (stderr && stderr !== '(No stderr logged)' ? `Diagnostics: ${stderr}\n` : '') +
+              `Note: The Layer 2/3 Reduced-Order Spatial Simulator remains fully operational.\n`;
             outputConsole.scrollTop = outputConsole.scrollHeight;
           }
 
           if (resultsPanel) {
             const elStat = document.getElementById('res-exec-status');
-            if (elStat) { elStat.textContent = 'FAILED'; elStat.style.color = '#ef4444'; }
+            if (elStat) { elStat.textContent = 'FAILED / UNAVAILABLE'; elStat.style.color = '#ef4444'; }
             const elDur = document.getElementById('res-exec-duration');
             if (elDur) elDur.textContent = `${dur}s`;
             const elYears = document.getElementById('res-sim-years');
@@ -1071,7 +1126,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (elRho) elRho.textContent = 'NOT AVAILABLE';
             const stabEl = document.getElementById('res-stability-class');
             if (stabEl) {
-              stabEl.textContent = 'EXECUTION_FAILED';
+              stabEl.textContent = 'EXECUTION_UNAVAILABLE';
               stabEl.style.color = '#ef4444';
             }
             const simIdEl = document.getElementById('res-sim-id');
@@ -1079,7 +1134,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const badgeEl = document.getElementById('landis-results-badge');
             if (badgeEl) {
               badgeEl.className = 'tag-badge unstable';
-              badgeEl.textContent = 'FAILED';
+              badgeEl.textContent = 'UNAVAILABLE';
             }
             resultsPanel.style.display = 'block';
           }
@@ -1101,7 +1156,7 @@ document.addEventListener('DOMContentLoaded', () => {
           const elStat = document.getElementById('res-exec-status');
           if (elStat) { elStat.textContent = isTimeout ? 'TIMED OUT' : 'REQUEST ERROR'; elStat.style.color = '#ef4444'; }
           const elDur = document.getElementById('res-exec-duration');
-          if (elDur) elDur.textContent = '> 150s';
+          if (elDur) elDur.textContent = isTimeout ? '> 150s' : `${runSeconds}s`;
           const elYears = document.getElementById('res-sim-years');
           if (elYears) elYears.textContent = 'NOT AVAILABLE';
           const elRasters = document.getElementById('res-raster-count');
