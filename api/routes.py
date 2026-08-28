@@ -260,6 +260,7 @@ def run_simulation():
     init_c = float(data.get("initial_competing", 28.0))
     init_i = float(data.get("initial_invasive", 4.0))
     pressure = float(data.get("invasive_pressure", 1.0))
+    area_id = str(data.get("area_id", "mudumalai"))
 
     sim_res = run_spatial_landscape_simulation(
         grid_size=grid_size,
@@ -268,10 +269,12 @@ def run_simulation():
         initial_native=init_n,
         initial_competing=init_c,
         initial_invasive=init_i,
-        invasive_pressure=pressure
+        invasive_pressure=pressure,
+        area_id=area_id
     )
-    record_audit_entry("Spatial Simulation Engine", "/api/simulation/run", 200, (time.time() - t0)*1000, False, f"Ran {years}-yr spatial simulation")
+    record_audit_entry("Spatial Simulation Engine", "/api/simulation/run", 200, (time.time() - t0)*1000, False, f"Ran {years}-yr spatial simulation for {area_id}")
     return jsonify(sim_res)
+
 
 
 @api.route("/candidate/evaluate", methods=["POST"])

@@ -308,6 +308,10 @@ def run_full_browser_qa(port=9225):
         cdp.eval_js("document.querySelector('.nav-btn[data-workspace=\"simulation\"]')?.click()")
         time.sleep(0.8)
 
+        # Verify spatial disclaimer badge
+        badge_text = cdp.eval_js("document.querySelector('.spatial-scale-info .tag-badge')?.textContent") or ""
+        print(f"  Spatial Distribution Disclaimer Badge: '{badge_text}'")
+
         # Step +1
         cdp.eval_js("document.getElementById('btn-sim-step')?.click()")
         y_step1 = cdp.eval_js("document.getElementById('tm-year-label')?.textContent")
@@ -320,76 +324,147 @@ def run_full_browser_qa(port=9225):
         cdp.eval_js("document.getElementById('btn-sim-reset')?.click()")
         y_reset = cdp.eval_js("document.getElementById('tm-year-label')?.textContent")
 
-        print(f"  Year after +1 Step: '{y_step1}'")
-        print(f"  Year after +5 Step: '{y_step5}'")
-        print(f"  Year after Reset:   '{y_reset}'")
+        # Test Layer Overlay Switching (understory, invasive, native)
+        cdp.eval_js("document.getElementById('sim-layer-mode').value = 'understory'; document.getElementById('sim-layer-mode').dispatchEvent(new Event('change'));")
+        time.sleep(0.3)
+        cdp.eval_js("document.getElementById('sim-layer-mode').value = 'native'; document.getElementById('sim-layer-mode').dispatchEvent(new Event('change'));")
+        time.sleep(0.3)
 
-        cond_d = ("Year 1" in str(y_step1) and "Year 6" in str(y_step5) and "Year 0" in str(y_reset))
+        # Verify legend and statistical metrics
+        leg_title = cdp.eval_js("document.getElementById('legend-layer-title')?.textContent") or ""
+        leg_mean = cdp.eval_js("document.getElementById('stat-card-mean')?.textContent") or ""
+        leg_min = cdp.eval_js("document.getElementById('stat-card-min')?.textContent") or ""
+        leg_max = cdp.eval_js("document.getElementById('stat-card-max')?.textContent") or ""
+        leg_std = cdp.eval_js("document.getElementById('stat-card-std')?.textContent") or ""
+
+        safe_leg_title = str(leg_title).encode('ascii', errors='replace').decode('ascii')
+        print(f"  Live Legend Title: '{safe_leg_title}'")
+        print(f"  Matrix Stats -> Mean: '{leg_mean}', Min: '{leg_min}', Max: '{leg_max}', Std Dev: '{leg_std}'")
+
+        cond_d = (
+            "Year 1" in str(y_step1) and
+            "Year 6" in str(y_step5) and
+            "Year 0" in str(y_reset) and
+            "BASELINE-CONSTRAINED" in str(badge_text) and
+            "NATIVE" in str(leg_title) and
+            "--" not in str(leg_mean) and
+            "--" not in str(leg_std)
+        )
         results["D_SPATIAL_SIMULATOR"] = "PASS" if cond_d else "FAIL"
         if not cond_d:
-            error_details.append(f"D_SPATIAL_SIMULATOR failed: step1={y_step1}, step5={y_step5}, reset={y_reset}")
+            error_details.append(f"D_SPATIAL_SIMULATOR failed: step1={y_step1}, step5={y_step5}, reset={y_reset}, badge={badge_text}, stats=({leg_mean}, {leg_std})")
         print(f"  -> Result: {results['D_SPATIAL_SIMULATOR']}")
 
-        # ==========================================
-        # WORKFLOW E: BIOMASS CHART
-        # ==========================================
-        print("\n[TEST E] BIOMASS TRAJECTORY CHART (Chart.js)")
-        chart_e_ds = cdp.eval_js("window.Chart ? (document.getElementById('simBiomassChart') ? window.Chart.getChart('simBiomassChart')?.data.datasets.length : 0) : 0") or 0
-        chart_e_labels = cdp.eval_js("window.Chart ? (document.getElementById('simBiomassChart') ? window.Chart.getChart('simBiomassChart')?.data.labels.length : 0) : 0") or 0
-        print(f"  Biomass Datasets: {chart_e_ds} (Expected: 3), Time Labels: {chart_e_labels} (Expected: >10)")
 
-        cond_e = (int(chart_e_ds) == 3 and int(chart_e_labels) > 10)
+
+        # ==========================================
+        # WORKFLOW E: BIOMASS CHART SITE DYNAMICS
+        # ==========================================
+        print("\n[TEST E] BIOMASS TRAJECTORY CHART (Chart.js Initial Condition Tracking)")
+        # Test Kaziranga
+        cdp.eval_js("window.selectPaDirect('kaziranga')")
+        time.sleep(1.2)
+        kazi_pt0 = cdp.eval_js("window.Chart?.getChart('simBiomassChart')?.data.datasets[0]?.data[0]")
+        
+        # Test Gir
+        cdp.eval_js("window.selectPaDirect('gir')")
+        time.sleep(1.2)
+        gir_pt0 = cdp.eval_js("window.Chart?.getChart('simBiomassChart')?.data.datasets[0]?.data[0]")
+
+        # Test Mudumalai
+        cdp.eval_js("window.selectPaDirect('mudumalai')")
+        time.sleep(1.2)
+        mudu_pt0 = cdp.eval_js("window.Chart?.getChart('simBiomassChart')?.data.datasets[0]?.data[0]")
+
+        # Restore Kaziranga
+        cdp.eval_js("window.selectPaDirect('kaziranga')")
+        time.sleep(1.2)
+        kazi_restore_pt0 = cdp.eval_js("window.Chart?.getChart('simBiomassChart')?.data.datasets[0]?.data[0]")
+
+        print(f"  Kaziranga Year 0 Native Biomass: {kazi_pt0} Mg/ha (Expected: 210.8)")
+        print(f"  Gir Year 0 Native Biomass:       {gir_pt0} Mg/ha (Expected: 98.2)")
+        print(f"  Mudumalai Year 0 Native Biomass: {mudu_pt0} Mg/ha (Expected: 158.4)")
+        print(f"  Kaziranga Restored Biomass:      {kazi_restore_pt0} Mg/ha (Expected: 210.8)")
+
+        chart_e_ds = cdp.eval_js("window.Chart?.getChart('simBiomassChart')?.data.datasets.length") or 0
+        chart_e_labels = cdp.eval_js("window.Chart?.getChart('simBiomassChart')?.data.labels.length") or 0
+
+        cond_e = (
+            float(kazi_pt0 or 0) == 210.8 and
+            float(gir_pt0 or 0) == 98.2 and
+            float(mudu_pt0 or 0) == 158.4 and
+            float(kazi_restore_pt0 or 0) == 210.8 and
+            int(chart_e_ds) == 3 and
+            int(chart_e_labels) == 31
+        )
         results["E_BIOMASS_CHART"] = "PASS" if cond_e else "FAIL"
         if not cond_e:
-            error_details.append(f"E_BIOMASS_CHART: ds={chart_e_ds}, labels={chart_e_labels}")
+            error_details.append(f"E_BIOMASS_CHART: kazi={kazi_pt0}, gir={gir_pt0}, mudu={mudu_pt0}, ds={chart_e_ds}")
         print(f"  -> Result: {results['E_BIOMASS_CHART']}")
 
         # ==========================================
         # WORKFLOW F: SPECTRAL RADIUS CHART
         # ==========================================
         print("\n[TEST F] SPECTRAL RADIUS STABILITY CHART (Chart.js)")
-        chart_f_ds = cdp.eval_js("window.Chart ? (document.getElementById('simStabilityChart') ? window.Chart.getChart('simStabilityChart')?.data.datasets.length : 0) : 0") or 0
-        chart_f_labels = cdp.eval_js("window.Chart ? (document.getElementById('simStabilityChart') ? window.Chart.getChart('simStabilityChart')?.data.labels.length : 0) : 0") or 0
-        print(f"  Stability Datasets: {chart_f_ds} (Expected: 1), Time Labels: {chart_f_labels} (Expected: >10)")
+        chart_f_ds = cdp.eval_js("window.Chart?.getChart('simStabilityChart')?.data.datasets.length") or 0
+        chart_f_labels = cdp.eval_js("window.Chart?.getChart('simStabilityChart')?.data.labels.length") or 0
+        stab_pt0 = cdp.eval_js("window.Chart?.getChart('simStabilityChart')?.data.datasets[0]?.data[0]")
+        print(f"  Stability Datasets: {chart_f_ds} (Expected: 1), Time Labels: {chart_f_labels} (Expected: 31), Year 0 rho: {stab_pt0}")
 
-        cond_f = (int(chart_f_ds) == 1 and int(chart_f_labels) > 10)
+        cond_f = (int(chart_f_ds) == 1 and int(chart_f_labels) == 31 and float(stab_pt0 or 0) > 0.5)
         results["F_SPECTRAL_RADIUS_CHART"] = "PASS" if cond_f else "FAIL"
         if not cond_f:
-            error_details.append(f"F_SPECTRAL_RADIUS_CHART: ds={chart_f_ds}, labels={chart_f_labels}")
+            error_details.append(f"F_SPECTRAL_RADIUS_CHART: ds={chart_f_ds}, labels={chart_f_labels}, pt0={stab_pt0}")
         print(f"  -> Result: {results['F_SPECTRAL_RADIUS_CHART']}")
 
+
         # ==========================================
-        # WORKFLOW G: REAL LANDIS-II SUBPROCESS RUN
+        # WORKFLOW G: NATIVE LANDSCAPE ENGINE RUN
         # ==========================================
-        print("\n[TEST G] REAL LANDIS-II 7.0 SUBPROCESS EXECUTION")
+        print("\n[TEST G] NATIVE LANDSCAPE SIMULATION SUBPROCESS EXECUTION")
         cdp.eval_js("document.querySelector('.nav-btn[data-workspace=\"simulation\"]')?.click()")
         time.sleep(1.0)
-        print("  Triggering 'Run Real LANDIS-II Simulation'...")
+        print("  Triggering 'Run Native Landscape Simulation'...")
         cdp.eval_js("document.getElementById('btn-run-landis-engine')?.click()")
 
         landis_out = ""
         start_wait = time.time()
 
-        while time.time() - start_wait < 90:
+        while time.time() - start_wait < 120:
             time.sleep(1.0)
             landis_out = cdp.eval_js("document.getElementById('landis-stdout-console')?.textContent") or ""
-            if "LANDIS-II 7.0 SIMULATION COMPLETE" in landis_out:
+            if "COMPLETED" in landis_out or "SIMULATION COMPLETE" in landis_out:
                 break
-            if "LANDIS-II Error:" in landis_out or "Request failed:" in landis_out:
+            if "FAILED" in landis_out or "Simulation Status:" in landis_out or "Request failed:" in landis_out or "REQUEST EXCEPTION" in landis_out:
                 break
 
 
-        print(f"  LANDIS-II Output Snippet:\n    {landis_out.splitlines()[0] if landis_out else 'No output'}")
+        print(f"  Simulation Output Snippet:\n    {landis_out.splitlines()[0] if landis_out else 'No output'}")
         if "Output Rasters Generated" in landis_out:
             raster_line = [l for l in landis_out.splitlines() if "Output Rasters" in l][0]
             print(f"    {raster_line}")
 
-        cond_g = "LANDIS-II 7.0 SIMULATION COMPLETE" in landis_out and "GeoTIFF files" in landis_out
+        # Verify Dedicated Results Panel is visible and populated
+        panel_display = cdp.eval_js("document.getElementById('landis-results-panel')?.style.display")
+        exec_status = cdp.eval_js("document.getElementById('res-exec-status')?.textContent")
+        raster_stat = cdp.eval_js("document.getElementById('res-raster-count')?.textContent")
+        final_native = cdp.eval_js("document.getElementById('res-final-native')?.textContent")
+        btn_disabled = cdp.eval_js("document.getElementById('btn-run-landis-engine')?.disabled")
+
+        print(f"  Results Panel Display: '{panel_display}' | Status: '{exec_status}' | Rasters: '{raster_stat}' | Native: '{final_native}' | Button Disabled: {btn_disabled}")
+
+        cond_g = ("SIMULATION COMPLETE" in landis_out and 
+                  "GeoTIFF files" in landis_out and 
+                  panel_display == "block" and 
+                  "COMPLETED" in (exec_status or "") and
+                  btn_disabled is False)
         results["G_LANDIS_II_EXECUTION"] = "PASS" if cond_g else "FAIL"
 
         if not cond_g:
-            error_details.append(f"G_LANDIS_II_EXECUTION output: {landis_out[:100]}")
+            error_details.append(f"G_LANDIS_II_EXECUTION output: {landis_out[:100]} | Panel: {panel_display}")
         print(f"  -> Result: {results['G_LANDIS_II_EXECUTION']}")
+
+
 
         # ==========================================
         # WORKFLOW H: DECISION REPORT GENERATOR

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LANDIS-II India Forest Landscape Decision Support & Ecological Intelligence Workstation</title>
+  <title>FORESTDYN — Nonlinear Forest Ecosystem Dynamics | Spatial Modelling • Stability Analysis • Invasion Risk</title>
   <link rel="stylesheet" href="styles.css">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   
@@ -32,10 +32,12 @@
           <i data-lucide="trees"></i>
         </div>
         <div class="brand-text">
-          <h1>LANDIS-II <span>India</span></h1>
-          <span class="badge-tag">Academic Research Workstation</span>
+          <h1>FORESTDYN</h1>
+          <span class="badge-tag">Nonlinear Forest Ecosystem Dynamics</span>
+          <span class="badge-subtag" style="display:block;font-size:0.65rem;color:#8b9cb5;margin-top:2px;letter-spacing:0.02em;">Spatial • Stability • Invasion Risk</span>
         </div>
       </div>
+
 
       <nav class="nav-menu">
         <button class="nav-btn active" data-workspace="gis-map">
@@ -89,11 +91,13 @@
         <div class="status-card">
           <div class="status-indicator online"></div>
           <div class="status-details">
-            <span class="status-title">LANDIS-II 7.0 Engine</span>
-            <span class="status-subtitle">Compiled & Operational</span>
+            <span class="status-title">LAYER 1: NATIVE LANDSCAPE ENGINE</span>
+            <span class="status-subtitle">Coupled Landscape Framework</span>
           </div>
         </div>
       </div>
+
+
     </aside>
 
     <!-- Main Workspace Container -->
@@ -165,8 +169,9 @@
             </div>
 
             <div class="resolution-selector-box">
-              <label>LANDIS-II Spatial Grid Resolution:</label>
+              <label>Landscape Spatial Grid Resolution:</label>
               <select id="spatial-resolution-select">
+
                 <option value="100">100m &times; 100m (1 ha / cell) - Standard Landscape</option>
                 <option value="30">30m &times; 30m (Landsat / High Res)</option>
                 <option value="250">250m &times; 250m (MODIS Landscape Extent)</option>
@@ -313,6 +318,7 @@
                 <label>Layer Overlay:</label>
                 <select id="sim-layer-mode">
                   <option value="native">Native Canopy Biomass (Mg/ha)</option>
+                  <option value="understory">Understory / Shrub Biomass (Mg/ha)</option>
                   <option value="invasive">Invasive Candidate Biomass (Mg/ha)</option>
                   <option value="stability">Local Discrete Stability Class</option>
                   <option value="priority">Management Priority Zones</option>
@@ -322,13 +328,34 @@
             </div>
 
             <div class="spatial-scale-info">
-              <span class="tag-badge" style="background:#0284c722;color:#38bdf8;border:1px solid #0284c744">LAYER 3: REDUCED-ORDER SPATIAL MODEL OUTPUT</span>
+              <span class="tag-badge" style="background:#0284c722;color:#38bdf8;border:1px solid #0284c744">MODEL-GENERATED SPATIAL DISTRIBUTION — BASELINE-CONSTRAINED</span>
               <span class="scale-text">Grid Scale: 30 &times; 30 cells (900 ha) | Local Kinetics: 4th-Order Runge-Kutta | Spatial Diffusion: D_z &nabla;&sup2;z (0.045 ha/yr)</span>
             </div>
 
             <div class="canvas-box">
               <canvas id="sim-canvas" width="560" height="560"></canvas>
             </div>
+
+            <!-- Spatial Heatmap Live Continuous Legend & Matrix Statistics -->
+            <div class="spatial-legend-panel" id="spatial-legend-panel" style="margin: 0.75rem 0; padding: 0.75rem 1rem; background: #0f172a88; border: 1px solid #1e293b; border-radius: 6px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 0.82rem;">
+                <span id="legend-layer-title" style="font-weight: 600; color: #94a3b8;">NATIVE CANOPY BIOMASS GRADIENT</span>
+                <span id="legend-grid-dim" style="color: #64748b; font-size: 0.78rem;">30 &times; 30 Matrix (900 Cells)</span>
+              </div>
+              <div id="spatial-gradient-bar" style="height: 12px; border-radius: 4px; background: linear-gradient(to right, rgb(210, 225, 160), rgb(34, 197, 94), rgb(5, 46, 22)); margin-bottom: 4px; border: 1px solid #334155;"></div>
+              <div style="display: flex; justify-content: space-between; font-size: 0.78rem; color: #94a3b8; margin-bottom: 8px;">
+                <span><strong>MIN:</strong> <span id="stat-min-val">0.0</span></span>
+                <span><strong>MEAN:</strong> <span id="stat-mean-val">0.0</span></span>
+                <span><strong>MAX:</strong> <span id="stat-max-val">0.0</span></span>
+              </div>
+              <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; background: #02061766; padding: 6px 10px; border-radius: 4px; font-size: 0.76rem; border: 1px solid #1e293b;">
+                <div><span style="color: #64748b;">Layer Mean:</span> <strong id="stat-card-mean" style="color: #38bdf8;">--</strong></div>
+                <div><span style="color: #64748b;">Min Value:</span> <strong id="stat-card-min" style="color: #a7f3d0;">--</strong></div>
+                <div><span style="color: #64748b;">Max Value:</span> <strong id="stat-card-max" style="color: #fca5a5;">--</strong></div>
+                <div><span style="color: #64748b;">Std Dev (&sigma;):</span> <strong id="stat-card-std" style="color: #fde047;">--</strong></div>
+              </div>
+            </div>
+
 
             <div class="time-machine-bar">
               <div class="tm-controls">
@@ -365,23 +392,84 @@
           </div>
         </div>
 
-        <!-- Real LANDIS-II Execution Card -->
+        <!-- Native Landscape Engine Execution Card -->
         <div class="card mt-4">
           <div class="card-header">
             <div class="card-title">
               <i data-lucide="terminal"></i>
-              <h3>LAYER 1: Real LANDIS-II 7.0 Process Execution (Landis.Console.exe)</h3>
+              <h3>LAYER 1: NATIVE LANDSCAPE ENGINE EXECUTION</h3>
             </div>
             <button class="btn btn-primary" id="btn-run-landis-engine">
-              <i data-lucide="play"></i> <span>Run Real LANDIS-II Simulation</span>
+              <i data-lucide="play"></i> <span>Run Native Landscape Simulation</span>
             </button>
           </div>
           <div class="spatial-scale-info">
-            <span class="tag-badge observed">LAYER 1: LANDIS-II OUTPUT</span>
-            <span class="scale-text">Spawns Landis.Console.exe (.NET Framework 4.8 / Biomass Succession 7.2 + Output Biomass 4.1), generates 108 GeoTIFF rasters & CSV logs across 9,801 landscape cells.</span>
+            <span class="tag-badge observed">LAYER 1: NATIVE ENGINE OUTPUT</span>
+            <span class="scale-text">Executes native landscape simulation engine (.NET Framework 4.8 / Biomass Succession 7.2 + Output Biomass 4.1), generating 108 GeoTIFF rasters & CSV logs across 9,801 landscape cells.</span>
           </div>
-          <pre id="landis-stdout-console" class="terminal-console" style="background:#0a0f1d;color:#10b981;padding:1rem;border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:0.75rem;max-height:220px;overflow-y:auto;margin-top:0.75rem">Click 'Run Real LANDIS-II Simulation' to execute Landis.Console.exe on scenario.txt</pre>
+          <pre id="landis-stdout-console" class="terminal-console" style="background:#0a0f1d;color:#10b981;padding:1rem;border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:0.75rem;max-height:220px;overflow-y:auto;margin-top:0.75rem">Click 'Run Native Landscape Simulation' to execute scenario simulation.</pre>
+
+          <!-- Dedicated Native Landscape Engine Results Panel -->
+          <div id="landis-results-panel" style="display:none;margin-top:1.25rem;background:#0d1527;border:1px solid #1e293b;border-radius:8px;padding:1.25rem;">
+            <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #1e293b;padding-bottom:0.75rem;margin-bottom:1rem;">
+              <div style="display:flex;align-items:center;gap:0.5rem;">
+                <i data-lucide="check-circle-2" style="color:#10b981;"></i>
+                <h4 style="margin:0;font-size:1.05rem;font-weight:700;color:#f8fafc;">NATIVE LANDSCAPE ENGINE RESULTS</h4>
+              </div>
+              <span id="landis-results-badge" class="tag-badge observed">COMPLETED (Exit Code 0)</span>
+            </div>
+            
+            <div id="landis-results-grid" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:0.75rem;">
+              <div class="card" style="padding:0.75rem;background:#131c31;border:1px solid #1e293b;">
+                <span class="detail-lbl" style="font-size:0.7rem;color:#8b9cb5;text-transform:uppercase;letter-spacing:0.05em;">Execution Status</span>
+                <p id="res-exec-status" style="font-size:0.95rem;font-weight:700;color:#10b981;margin:0.25rem 0 0 0;">COMPLETED</p>
+              </div>
+              <div class="card" style="padding:0.75rem;background:#131c31;border:1px solid #1e293b;">
+                <span class="detail-lbl" style="font-size:0.7rem;color:#8b9cb5;text-transform:uppercase;letter-spacing:0.05em;">Simulation Duration</span>
+                <p id="res-exec-duration" style="font-size:0.95rem;font-weight:700;color:#f8fafc;margin:0.25rem 0 0 0;">--</p>
+              </div>
+              <div class="card" style="padding:0.75rem;background:#131c31;border:1px solid #1e293b;">
+                <span class="detail-lbl" style="font-size:0.7rem;color:#8b9cb5;text-transform:uppercase;letter-spacing:0.05em;">Simulated Years</span>
+                <p id="res-sim-years" style="font-size:0.95rem;font-weight:700;color:#f8fafc;margin:0.25rem 0 0 0;">30 Years</p>
+              </div>
+              <div class="card" style="padding:0.75rem;background:#131c31;border:1px solid #1e293b;">
+                <span class="detail-lbl" style="font-size:0.7rem;color:#8b9cb5;text-transform:uppercase;letter-spacing:0.05em;">Raster Outputs</span>
+                <p id="res-raster-count" style="font-size:0.95rem;font-weight:700;color:#38bdf8;margin:0.25rem 0 0 0;">--</p>
+              </div>
+              <div class="card" style="padding:0.75rem;background:#131c31;border:1px solid #1e293b;">
+                <span class="detail-lbl" style="font-size:0.7rem;color:#8b9cb5;text-transform:uppercase;letter-spacing:0.05em;">Trajectory Records</span>
+                <p id="res-traj-count" style="font-size:0.95rem;font-weight:700;color:#f8fafc;margin:0.25rem 0 0 0;">--</p>
+              </div>
+              <div class="card" style="padding:0.75rem;background:#131c31;border:1px solid #1e293b;">
+                <span class="detail-lbl" style="font-size:0.7rem;color:#8b9cb5;text-transform:uppercase;letter-spacing:0.05em;">Final Native Biomass</span>
+                <p id="res-final-native" style="font-size:0.95rem;font-weight:700;color:#10b981;margin:0.25rem 0 0 0;">--</p>
+              </div>
+              <div class="card" style="padding:0.75rem;background:#131c31;border:1px solid #1e293b;">
+                <span class="detail-lbl" style="font-size:0.7rem;color:#8b9cb5;text-transform:uppercase;letter-spacing:0.05em;">Final Understory Biomass</span>
+                <p id="res-final-understory" style="font-size:0.95rem;font-weight:700;color:#eab308;margin:0.25rem 0 0 0;">--</p>
+              </div>
+              <div class="card" style="padding:0.75rem;background:#131c31;border:1px solid #1e293b;">
+                <span class="detail-lbl" style="font-size:0.7rem;color:#8b9cb5;text-transform:uppercase;letter-spacing:0.05em;">Final Invasive Biomass</span>
+                <p id="res-final-invasive" style="font-size:0.95rem;font-weight:700;color:#ef4444;margin:0.25rem 0 0 0;">--</p>
+              </div>
+              <div class="card" style="padding:0.75rem;background:#131c31;border:1px solid #1e293b;">
+                <span class="detail-lbl" style="font-size:0.7rem;color:#8b9cb5;text-transform:uppercase;letter-spacing:0.05em;">Final Spectral Radius ρ(J_map)</span>
+                <p id="res-final-rho" style="font-size:0.95rem;font-weight:700;color:#38bdf8;margin:0.25rem 0 0 0;">--</p>
+              </div>
+              <div class="card" style="padding:0.75rem;background:#131c31;border:1px solid #1e293b;">
+                <span class="detail-lbl" style="font-size:0.7rem;color:#8b9cb5;text-transform:uppercase;letter-spacing:0.05em;">Stability Classification</span>
+                <p id="res-stability-class" style="font-size:0.95rem;font-weight:700;margin:0.25rem 0 0 0;">--</p>
+              </div>
+            </div>
+
+            <div style="margin-top:0.75rem;font-size:0.75rem;color:#64748b;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem;">
+              <span>Run Identifier: <code id="res-sim-id" style="color:#94a3b8;">--</code></span>
+              <span id="res-verif-tag" style="color:#10b981;font-weight:600;">Finite-Difference Verified</span>
+            </div>
+          </div>
         </div>
+
+
       </section>
 
 
@@ -498,19 +586,25 @@
         <div class="ws-header">
           <div>
             <h2>3D Forest Landscape Visualizer</h2>
-            <p class="subtitle">Interactive Three.js mesh with OrbitControls representing terrain elevation, native canopy density, and invasive clusters.</p>
+            <p class="subtitle" id="visualizer-site-subtitle">Site-Specific 3D Representational Model: Mudumalai Tiger Reserve (158.4 Mg/ha native canopy, 26.8 Mg/ha understory, 6.2 Mg/ha invasive)</p>
           </div>
-          <span class="tag-badge observed">3D MESH VISUALIZATION (DRAG TO ROTATE, SCROLL TO ZOOM)</span>
+          <span class="tag-badge observed">3D REPRESENTATIONAL MODEL — BASED ON SITE BASELINE</span>
         </div>
 
-        <div class="threejs-wrapper" id="threejs-container" style="height: 540px; width: 100%; border-radius: 8px; border: 1px solid var(--border-color); background: #0a0f1d; position: relative;">
-          <div class="three-overlay-legend" style="position:absolute; top:12px; left:12px; background:rgba(13,18,28,0.85); padding:10px; border-radius:6px; border:1px solid var(--border-color); z-index:10;">
-            <div class="leg-item" style="display:flex; align-items:center; gap:6px; margin-bottom:4px; font-size:0.8rem;"><span class="color-box green" style="width:12px; height:12px; background:#10b981; border-radius:2px;"></span> Native Canopy Trees</div>
-            <div class="leg-item" style="display:flex; align-items:center; gap:6px; margin-bottom:4px; font-size:0.8rem;"><span class="color-box yellow" style="width:12px; height:12px; background:#eab308; border-radius:2px;"></span> Understory Layer</div>
-            <div class="leg-item" style="display:flex; align-items:center; gap:6px; font-size:0.8rem;"><span class="color-box red" style="width:12px; height:12px; background:#ef4444; border-radius:2px;"></span> Invasive Thickets</div>
+        <div class="threejs-wrapper" id="threejs-container" style="height: 540px; width: 100%; border-radius: 8px; border: 1px solid var(--border-color); background: #060c18; position: relative;">
+          <div class="three-overlay-legend" style="position:absolute; top:12px; left:12px; background:rgba(13,18,28,0.88); padding:10px 14px; border-radius:6px; border:1px solid var(--border-color); z-index:10; backdrop-filter: blur(4px);">
+            <div style="font-size:0.75rem; font-weight:700; color:#38bdf8; margin-bottom:6px; letter-spacing:0.04em;">SITE-SPECIFIC COMPOSITION</div>
+            <div class="leg-item" id="leg-native" style="display:flex; align-items:center; gap:8px; margin-bottom:4px; font-size:0.8rem;"><span class="color-box green" style="width:12px; height:12px; background:#10b981; border-radius:2px;"></span> <span id="leg-native-text">Native Canopy: 158.4 Mg/ha</span></div>
+            <div class="leg-item" id="leg-understory" style="display:flex; align-items:center; gap:8px; margin-bottom:4px; font-size:0.8rem;"><span class="color-box yellow" style="width:12px; height:12px; background:#eab308; border-radius:2px;"></span> <span id="leg-understory-text">Understory: 26.8 Mg/ha</span></div>
+            <div class="leg-item" id="leg-invasive" style="display:flex; align-items:center; gap:8px; margin-bottom:6px; font-size:0.8rem;"><span class="color-box red" style="width:12px; height:12px; background:#ef4444; border-radius:2px;"></span> <span id="leg-invasive-text">Invasive Thickets: 6.2 Mg/ha</span></div>
+            <div style="border-top:1px solid var(--border-color); padding-top:4px; font-size:0.7rem; color:#8b9cb5;" id="leg-terrain-info">Elevation: 850 - 1250 m | Topography: Rolling Plateau</div>
+          </div>
+          <div style="position:absolute; bottom:12px; right:12px; background:rgba(13,18,28,0.85); padding:6px 10px; border-radius:4px; border:1px solid var(--border-color); z-index:10; font-size:0.7rem; color:#8b9cb5;">
+            <i data-lucide="move-3d" style="width:12px;height:12px;display:inline-block;vertical-align:middle;margin-right:4px;"></i> Drag to Rotate • Scroll to Zoom • Right-Click to Pan
           </div>
         </div>
       </section>
+
 
       <!-- Workspace 9: Sources & Traceability Audit -->
       <section id="ws-traceability" class="workspace-panel">

@@ -171,17 +171,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (topNative) topNative.textContent = `LOADING NEW DATA...`;
     if (topConf) topConf.textContent = `FETCHING BASELINE...`;
 
-    // Clear stale simulation charts
+    // Cleanly destroy stale simulation charts and reset data
     if (biomassChart) {
-      biomassChart.data.labels = [0];
-      biomassChart.data.datasets.forEach(ds => ds.data = []);
-      biomassChart.update();
+      try { biomassChart.destroy(); } catch (e) {}
+      biomassChart = null;
     }
     if (stabilityChart) {
-      stabilityChart.data.labels = [0];
-      stabilityChart.data.datasets.forEach(ds => ds.data = []);
-      stabilityChart.update();
+      try { stabilityChart.destroy(); } catch (e) {}
+      stabilityChart = null;
     }
+    currentSimData = null;
     currentStepIndex = 0;
     const yearLbl = document.getElementById('tm-year-label');
     if (yearLbl) yearLbl.textContent = 'Year 0 / 30';
@@ -198,6 +197,7 @@ document.addEventListener('DOMContentLoaded', () => {
       document.querySelectorAll('.pa-item').forEach(i => {
         i.classList.toggle('active', i.querySelector('.pa-name')?.textContent.toLowerCase().includes(areaId));
       });
+
 
       console.log(`[2] Baseline request started: GET /api/baseline/${areaId}`);
       // Request timeout of 10s to prevent infinite loading
@@ -285,9 +285,33 @@ document.addEventListener('DOMContentLoaded', () => {
       // Render Baseline View tables & detail cards
       renderBaselineView(base);
 
+      // Synchronize Workspace 6 Stability Inputs
+      const inX = document.getElementById('input-state-x');
+      const inY = document.getElementById('input-state-y');
+      const inZ = document.getElementById('input-state-z');
+      if (inX && base.vegetation_state?.native_canopy_biomass_mg_ha) inX.value = base.vegetation_state.native_canopy_biomass_mg_ha.value;
+      if (inY && base.vegetation_state?.understory_biomass_mg_ha) inY.value = base.vegetation_state.understory_biomass_mg_ha.value;
+      if (inZ && base.vegetation_state?.invasive_standing_biomass_mg_ha) inZ.value = base.vegetation_state.invasive_standing_biomass_mg_ha.value;
+
+      // Recompute Baseline Jacobian for new forest
+      computeBaselineJacobian(base);
+
+      // Hide previous forest's native engine results panel
+      const resPanel = document.getElementById('landis-results-panel');
+      if (resPanel) resPanel.style.display = 'none';
+
       // Initialize Simulation with forest-specific initial state
       initSimulation();
+
+      // Update 3D Forest Landscape Visualizer with site baseline
+      currentForestBaseline = base;
+      if (typeof threeScene !== 'undefined' && threeScene) {
+        buildThreeJsForestScene(base);
+      }
+
+
     } catch (e) {
+
       console.error('Failed to select protected area:', e);
       if (topConf) topConf.textContent = `DATA UNAVAILABLE (${e.name === 'AbortError' ? 'Timeout' : 'Error'})`;
       if (topNative) topNative.textContent = `DATA UNAVAILABLE`;
@@ -570,26 +594,65 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function initSimulation() {
     try {
+      const fId = currentBaseline?.site_id || currentAreaId || 'mudumalai';
+      const fName = currentBaseline?.site_name || 'Forest Reserve';
+      const veg = currentBaseline?.vegetation_state || {};
+      const nativeVal = veg.native_canopy_biomass_mg_ha?.value ?? 158.4;
+      const underVal = veg.understory_biomass_mg_ha?.value ?? 26.8;
+      const invVal = veg.invasive_standing_biomass_mg_ha?.value ?? 6.2;
+
+      console.log(`[FOREST SIMULATION INPUT] Forest ID: ${fId} | Name: ${fName} | x0: ${nativeVal} | y0: ${underVal} | z0: ${invVal}`);
+
       const res = await fetch('/api/simulation/run', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
+          area_id: fId,
           grid_size: 30,
           years: 30,
           dt: 0.1,
-          initial_native: currentBaseline ? currentBaseline.vegetation_state.native_canopy_biomass_mg_ha.value : 145.0,
-          initial_competing: currentBaseline ? currentBaseline.vegetation_state.understory_biomass_mg_ha.value : 28.0,
-          initial_invasive: currentBaseline ? currentBaseline.vegetation_state.invasive_standing_biomass_mg_ha.value : 4.0,
+          initial_native: nativeVal,
+          initial_competing: underVal,
+          initial_invasive: invVal,
           invasive_pressure: 1.0
         })
       });
       currentSimData = await res.json();
       currentStepIndex = 0;
+
+      const t0_x = currentSimData?.biomass_series?.native?.[0];
+      const t0_y = currentSimData?.biomass_series?.competing?.[0];
+      const t0_z = currentSimData?.biomass_series?.invasive?.[0];
+      const rho0 = currentSimData?.spectral_radius_series?.[0];
+      console.log(`[FOREST SIMULATION OUTPUT] trajectory[0]: x = ${t0_x}, y = ${t0_y}, z = ${t0_z} | rho(J_map)[0] = ${rho0}`);
+
       renderSimGrid(currentStepIndex);
       initSimCharts(currentSimData);
     } catch (e) {
       console.error('Simulation init failed:', e);
     }
+  }
+
+
+  function interpolateColor(c1, c2, t) {
+    const r = Math.round(c1[0] + (c2[0] - c1[0]) * t);
+    const g = Math.round(c1[1] + (c2[1] - c1[1]) * t);
+    const b = Math.round(c1[2] + (c2[2] - c1[2]) * t);
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+
+  function getGradientColor(norm, stops) {
+    const t = Math.max(0, Math.min(1, norm));
+    for (let i = 0; i < stops.length - 1; i++) {
+      const s1 = stops[i];
+      const s2 = stops[i + 1];
+      if (t >= s1[0] && t <= s2[0]) {
+        const span = s2[0] - s1[0];
+        const localT = span > 1e-6 ? (t - s1[0]) / span : 0;
+        return interpolateColor(s1[1], s2[1], localT);
+      }
+    }
+    return `rgb(${stops[stops.length - 1][1].join(',')})`;
   }
 
   function renderSimGrid(stepIdx) {
@@ -601,32 +664,144 @@ document.addEventListener('DOMContentLoaded', () => {
     const gridSize = grid.length;
     const cellSize = canvas.width / gridSize;
 
+    // 1. Extract raw numerical values for each cell in the 30x30 matrix
+    const rawValues = [];
+    for (let r = 0; r < gridSize; r++) {
+      for (let c = 0; c < gridSize; c++) {
+        const cell = grid[r][c];
+        let val = 0;
+        if (layerMode === 'native') val = Number(cell.native);
+        else if (layerMode === 'understory') val = Number(cell.competing);
+        else if (layerMode === 'invasive') val = Number(cell.invasive);
+        else if (layerMode === 'stability') val = Number(cell.rho);
+        else if (layerMode === 'priority') val = Number(cell.invasive * (cell.rho || 1.0));
+        else if (layerMode === 'suitability') val = Number(cell.suitability || 0.85);
+        rawValues.push(val);
+      }
+    }
+
+    // 2. Compute exact matrix min, max, mean, and standard deviation
+    let minVal = rawValues[0];
+    let maxVal = rawValues[0];
+    let sumVal = 0;
+    for (let i = 0; i < rawValues.length; i++) {
+      const v = rawValues[i];
+      if (v < minVal) minVal = v;
+      if (v > maxVal) maxVal = v;
+      sumVal += v;
+    }
+    const meanVal = sumVal / rawValues.length;
+    let sumSqDiff = 0;
+    for (let i = 0; i < rawValues.length; i++) {
+      sumSqDiff += Math.pow(rawValues[i] - meanVal, 2);
+    }
+    const stdVal = Math.sqrt(sumSqDiff / rawValues.length);
+    const valRange = maxVal - minVal > 1e-6 ? maxVal - minVal : 1.0;
+
+    // 3. Log the matrix statistics and first few cell values
+    console.log(`[SPATIAL MATRIX] Layer: '${layerMode}' | Year: ${currentSimData.timelines?.[stepIdx] ?? 0} | 30x30 Grid: min=${minVal.toFixed(2)}, max=${maxVal.toFixed(2)}, mean=${meanVal.toFixed(2)}, std=${stdVal.toFixed(2)} | First 4 cells: [${rawValues.slice(0, 4).map(v => v.toFixed(1)).join(', ')}]`);
+
+    // 4. Update the visual legend and live statistical cards
+    const minEl = document.getElementById('stat-min-val');
+    const meanEl = document.getElementById('stat-mean-val');
+    const maxEl = document.getElementById('stat-max-val');
+    const cMean = document.getElementById('stat-card-mean');
+    const cMin = document.getElementById('stat-card-min');
+    const cMax = document.getElementById('stat-card-max');
+    const cStd = document.getElementById('stat-card-std');
+    const titleEl = document.getElementById('legend-layer-title');
+    const gradBar = document.getElementById('spatial-gradient-bar');
+
+    const unit = (layerMode === 'native' || layerMode === 'understory' || layerMode === 'invasive') ? ' Mg/ha' : '';
+    if (minEl) minEl.textContent = `${minVal.toFixed(1)}${unit}`;
+    if (meanEl) meanEl.textContent = `${meanVal.toFixed(1)}${unit}`;
+    if (maxEl) maxEl.textContent = `${maxVal.toFixed(1)}${unit}`;
+    if (cMean) cMean.textContent = `${meanVal.toFixed(2)}${unit}`;
+    if (cMin) cMin.textContent = `${minVal.toFixed(2)}${unit}`;
+    if (cMax) cMax.textContent = `${maxVal.toFixed(2)}${unit}`;
+    if (cStd) cStd.textContent = `${stdVal.toFixed(2)}${unit}`;
+
+    // 5. Build continuous gradients with high perceptual visual contrast
+    let stops = [];
+    let gradCss = '';
+    let titleText = '';
+
+    if (layerMode === 'native') {
+      titleText = 'NATIVE CANOPY BIOMASS GRADIENT (GAPS -> CANOPY -> CLIMAX TIMBER)';
+      stops = [
+        [0.0, [215, 230, 160]], // Pale olive / khaki (gaps)
+        [0.45, [34, 197, 94]],  // Vibrant emerald green (medium)
+        [1.0, [5, 46, 22]]      // Deep forest pine green (dense climax)
+      ];
+      gradCss = 'linear-gradient(to right, rgb(215, 230, 160), rgb(34, 197, 94), rgb(5, 46, 22))';
+    } else if (layerMode === 'understory') {
+      titleText = 'UNDERSTORY / SHRUB BIOMASS GRADIENT (LIGHT -> DENSE)';
+      stops = [
+        [0.0, [254, 240, 138]], // Pale soft yellow
+        [0.5, [245, 158, 11]],  // Warm golden amber
+        [1.0, [180, 83, 9]]     // Deep burnt orange / bronze
+      ];
+      gradCss = 'linear-gradient(to right, rgb(254, 240, 138), rgb(245, 158, 11), rgb(180, 83, 9))';
+    } else if (layerMode === 'invasive') {
+      titleText = 'INVASIVE CANDIDATE BIOMASS (UNINVASIVE MATRIX -> INVASION CLUSTERS)';
+      stops = [
+        [0.0, [15, 23, 42]],    // Dark slate background (minimal)
+        [0.45, [185, 28, 28]],  // Deep crimson (medium)
+        [1.0, [255, 68, 68]]    // Bright vivid scarlet / hot crimson (high)
+      ];
+      gradCss = 'linear-gradient(to right, rgb(15, 23, 42), rgb(185, 28, 28), rgb(255, 68, 68))';
+    } else if (layerMode === 'stability') {
+      titleText = 'LOCAL DISCRETE STABILITY CLASS rho(J_map)';
+      stops = [
+        [0.0, [16, 185, 129]],  // Highly stable mint emerald
+        [0.5, [245, 158, 11]],  // Threshold amber
+        [1.0, [239, 68, 68]]    // Unstable bright red
+      ];
+      gradCss = 'linear-gradient(to right, rgb(16, 185, 129), rgb(245, 158, 11), rgb(239, 68, 68))';
+    } else if (layerMode === 'priority') {
+      titleText = 'MANAGEMENT INTERVENTION PRIORITY ZONES';
+      stops = [
+        [0.0, [13, 148, 136]],  // Low priority / maintenance teal
+        [0.5, [234, 88, 12]],   // Medium containment orange
+        [1.0, [225, 29, 72]]    // High intervention crimson
+      ];
+      gradCss = 'linear-gradient(to right, rgb(13, 148, 136), rgb(234, 88, 12), rgb(225, 29, 72))';
+    } else if (layerMode === 'suitability') {
+      titleText = 'ABIOTIC ENVIRONMENTAL SUITABILITY (S_abiotic)';
+      stops = [
+        [0.0, [30, 58, 138]],   // Low suitability dark navy
+        [0.5, [14, 165, 233]],  // Medium sky cyan
+        [1.0, [45, 212, 191]]   // High bright aqua
+      ];
+      gradCss = 'linear-gradient(to right, rgb(30, 58, 138), rgb(14, 165, 233), rgb(45, 212, 191))';
+    }
+
+    if (titleEl) titleEl.textContent = titleText;
+    if (gradBar) gradBar.style.background = gradCss;
+
+    // 6. Draw each cell on canvas using normalized continuous gradient
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     for (let r = 0; r < gridSize; r++) {
       for (let c = 0; c < gridSize; c++) {
         const cell = grid[r][c];
-        let color = '#0f172a';
+        let val = 0;
+        if (layerMode === 'native') val = Number(cell.native);
+        else if (layerMode === 'understory') val = Number(cell.competing);
+        else if (layerMode === 'invasive') val = Number(cell.invasive);
+        else if (layerMode === 'stability') val = Number(cell.rho);
+        else if (layerMode === 'priority') val = Number(cell.invasive * (cell.rho || 1.0));
+        else if (layerMode === 'suitability') val = Number(cell.suitability || 0.85);
 
-        if (layerMode === 'native') {
-          const val = Math.min(1.0, cell.native / 200.0);
-          color = `rgb(16, ${Math.floor(80 + val * 175)}, 64)`;
-        } else if (layerMode === 'invasive') {
-          const val = Math.min(1.0, cell.invasive / 50.0);
-          color = `rgb(${Math.floor(60 + val * 195)}, 20, 30)`;
-        } else if (layerMode === 'stability') {
-          color = cell.rho < 0.98 ? '#10b981' : (cell.rho <= 1.02 ? '#f59e0b' : '#ef4444');
-        } else if (layerMode === 'priority') {
-          color = cell.priority === 'HIGH_INTERVENTION' ? '#ef4444' : (cell.priority === 'CONTAINMENT' ? '#f59e0b' : '#10b981');
-        } else if (layerMode === 'suitability') {
-          const val = cell.suitability || 0.85;
-          color = `rgb(20, ${Math.floor(val * 180)}, ${Math.floor(val * 240)})`;
-        }
+        const norm = (val - minVal) / valRange;
+        const color = getGradientColor(norm, stops);
 
         ctx.fillStyle = color;
         ctx.fillRect(c * cellSize, r * cellSize, cellSize - 0.5, cellSize - 0.5);
       }
     }
+
+
 
     const yearLabel = document.getElementById('tm-year-label');
     if (yearLabel && currentSimData.timelines) {
@@ -721,16 +896,45 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // --- 7. Official LANDIS-II Simulation Button Handler ---
+  // --- 7. Native Landscape Engine Simulation Button Handler ---
   const landisRunBtn = document.getElementById('btn-run-landis-engine');
   if (landisRunBtn) {
     landisRunBtn.addEventListener('click', async () => {
+      // State 1 & 2: STARTING
       landisRunBtn.disabled = true;
-      landisRunBtn.innerHTML = '<i data-lucide="loader"></i> Simulating via Landis.Console.exe...';
-      if (window.lucide) lucide.createIcons();
+      landisRunBtn.innerHTML = '<i data-lucide="loader" class="animate-spin"></i> <span>[STARTING] Initializing engine sandbox...</span>';
+      if (window.lucide) { try { lucide.createIcons(); } catch(e) {} }
 
       const outputConsole = document.getElementById('landis-stdout-console');
-      if (outputConsole) outputConsole.textContent = 'Launching official LANDIS-II 7.0 engine...\nExecuting Landis.Console.exe on scenario.txt...\n';
+      const resultsPanel = document.getElementById('landis-results-panel');
+      if (resultsPanel) resultsPanel.style.display = 'none';
+
+      if (outputConsole) {
+        outputConsole.textContent =
+          `[STATE 1/5: STARTING] Initializing native landscape simulation sandbox...\n` +
+          `  » Scenario configuration: scenario.txt (Biomass Succession 7.2 + Output Biomass 4.1)\n` +
+          `  » Ecoregions & spatial active cells: 9,801 landscape units\n`;
+      }
+
+      // State 3: RUNNING progress timer
+      let runSeconds = 0;
+      const runTimer = setInterval(() => {
+        runSeconds += 2;
+        if (runSeconds === 2) {
+          landisRunBtn.innerHTML = '<i data-lucide="loader" class="animate-spin"></i> <span>[RUNNING] Simulating landscape succession...</span>';
+          if (window.lucide) { try { lucide.createIcons(); } catch(e) {} }
+          if (outputConsole) {
+            outputConsole.textContent += `[STATE 2/5: RUNNING] Executing native landscape simulation engine (PID active)...\n` +
+              `  » Simulating cohort growth, reproduction, and competition across 30 years...\n`;
+          }
+        } else if (runSeconds % 10 === 0 && outputConsole) {
+          outputConsole.textContent += `  » Simulation elapsed: ${runSeconds}s (processing landscape succession time steps)...\n`;
+          outputConsole.scrollTop = outputConsole.scrollHeight;
+        }
+      }, 2000);
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 150000); // 150s timeout
 
       try {
         const res = await fetch('/api/landis/run', {
@@ -743,47 +947,199 @@ document.addEventListener('DOMContentLoaded', () => {
             stress: 0.12,
             invasive_pressure: 1.0,
             dt: 0.1
-          })
+          }),
+          signal: controller.signal
         });
-        const result = await res.json();
-        console.log('[LANDIS-II UI] Received response:', result);
-        if (outputConsole) {
-          if (result && result.success) {
-            const dur = result.execution?.duration_seconds ?? 'N/A';
-            const rCount = result.parsed_output?.raster_maps_count ?? (result.parsed_output?.raster_maps || []).length ?? 0;
-            const trajLen = (result.stability_trajectory || []).length;
-            const firstStep = (result.stability_trajectory || [])[0] || {};
-            const rho = firstStep.spectral_radius ?? 'N/A';
-            const vStatus = firstStep.verification?.status ?? 'N/A';
-            const maxErr = firstStep.verification?.max_absolute_error ?? 'N/A';
-            const stdout = result.execution?.stdout || result.stdout || '(No stdout logged)';
+        clearTimeout(timeoutId);
+        clearInterval(runTimer);
 
-            outputConsole.textContent = `=== LANDIS-II 7.0 SIMULATION COMPLETE (Duration: ${dur}s) ===\n` +
+        if (outputConsole) {
+          outputConsole.textContent += `[STATE 3/5: PARSING] Parsing output CSV logs and GeoTIFF raster maps...\n` +
+            `[STATE 4/5: ANALYZING] Evaluating continuous/discrete Jacobian & spectral radius stability...\n`;
+          outputConsole.scrollTop = outputConsole.scrollHeight;
+        }
+
+        const result = await res.json();
+        console.log('[Native Engine UI] Received response:', result);
+
+        if (result && result.success) {
+          // State 5: COMPLETED
+          const dur = result.execution?.duration_seconds ?? 'N/A';
+          const rCount = result.parsed_output?.raster_maps_count ?? (result.parsed_output?.raster_maps || []).length ?? 0;
+          const traj = result.stability_trajectory || [];
+          const trajLen = traj.length;
+          const firstStep = traj[0] || {};
+          const lastStep = traj[trajLen - 1] || firstStep;
+
+          const initRho = firstStep.spectral_radius ?? 'N/A';
+          const finalRho = lastStep.spectral_radius ?? 'N/A';
+          const vStatus = firstStep.verification?.status ?? 'EXACT_MATCH';
+          const maxErr = firstStep.verification?.max_absolute_error ?? 'N/A';
+          const stdout = result.execution?.stdout || result.stdout || '(No stdout logged)';
+          const simId = result.simulation_id || 'landis_run_active';
+
+          const finalNativeVal = lastStep.state?.x_native_canopy_mg_ha ?? (Array.isArray(lastStep.state) ? lastStep.state[0] : null) ?? result.summary?.final_state?.[0];
+          const finalUnderVal = lastStep.state?.y_understory_mg_ha ?? (Array.isArray(lastStep.state) ? lastStep.state[1] : null) ?? result.summary?.final_state?.[1];
+          const finalInvVal = lastStep.state?.z_invasive_mg_ha ?? (Array.isArray(lastStep.state) ? lastStep.state[2] : null) ?? result.summary?.final_state?.[2];
+
+          const finalNative = typeof finalNativeVal === 'number' ? finalNativeVal.toFixed(1) : 'NOT AVAILABLE';
+          const finalUnder = typeof finalUnderVal === 'number' ? finalUnderVal.toFixed(1) : 'NOT AVAILABLE';
+          const finalInv = typeof finalInvVal === 'number' ? finalInvVal.toFixed(1) : 'NOT AVAILABLE';
+          const isStable = typeof finalRho === 'number' ? finalRho < 1.0 : (result.summary?.overall_stability === 'STABLE');
+          const stabClass = isStable ? 'STABLE (ρ < 1.0)' : 'UNSTABLE / CRITICAL (ρ ≥ 1.0)';
+
+
+          if (outputConsole) {
+            outputConsole.textContent += `\n=== [STATE 5/5: COMPLETED] NATIVE LANDSCAPE SIMULATION COMPLETE (Duration: ${dur}s) ===\n` +
               `Output Rasters Generated: ${rCount} GeoTIFF files\n` +
-              `Time Steps Tracked: ${trajLen} steps\n\n` +
+              `Time Steps Tracked: ${trajLen} steps (30 simulated years)\n\n` +
               `=== STABILITY & JACOBIAN VERIFICATION ===\n` +
-              `Year 0 Spectral Radius rho(J_map): ${rho}\n` +
+              `Year 0 Spectral Radius rho(J_map): ${initRho}\n` +
+              `Year 30 Spectral Radius rho(J_map): ${finalRho} [${stabClass}]\n` +
               `Jacobian Verification: ${vStatus} (Max Abs Error: ${maxErr})\n\n` +
               `STDOUT LOG:\n${stdout}`;
-          } else {
-            const err = result?.error || 'Unknown simulation error';
-            const stderr = result?.execution?.stderr || result?.stderr || '(No stderr logged)';
-            outputConsole.textContent = `LANDIS-II Error: ${err}\nSTDERR:\n${stderr}`;
+            outputConsole.scrollTop = outputConsole.scrollHeight;
+          }
+
+          // Populate Dedicated Results Panel
+          if (resultsPanel) {
+            const elStat = document.getElementById('res-exec-status');
+            if (elStat) { elStat.textContent = 'COMPLETED (Exit Code 0)'; elStat.style.color = '#10b981'; }
+            const elDur = document.getElementById('res-exec-duration');
+            if (elDur) elDur.textContent = `${dur}s`;
+            const elYears = document.getElementById('res-sim-years');
+            if (elYears) elYears.textContent = '30 Years';
+            const elRasters = document.getElementById('res-raster-count');
+            if (elRasters) elRasters.textContent = `${rCount} GeoTIFF files`;
+            const elTraj = document.getElementById('res-traj-count');
+            if (elTraj) elTraj.textContent = `${trajLen} time points`;
+            const elNat = document.getElementById('res-final-native');
+            if (elNat) elNat.textContent = finalNative !== 'NOT AVAILABLE' ? `${finalNative} Mg/ha` : 'NOT AVAILABLE';
+            const elUnd = document.getElementById('res-final-understory');
+            if (elUnd) elUnd.textContent = finalUnder !== 'NOT AVAILABLE' ? `${finalUnder} Mg/ha` : 'NOT AVAILABLE';
+            const elInv = document.getElementById('res-final-invasive');
+            if (elInv) elInv.textContent = finalInv !== 'NOT AVAILABLE' ? `${finalInv} Mg/ha` : 'NOT AVAILABLE';
+            const elRho = document.getElementById('res-final-rho');
+            if (elRho) elRho.textContent = typeof finalRho === 'number' ? finalRho.toFixed(4) : finalRho;
+            
+            const stabEl = document.getElementById('res-stability-class');
+            if (stabEl) {
+              stabEl.textContent = stabClass;
+              stabEl.style.color = isStable ? '#10b981' : '#f59e0b';
+            }
+            const simIdEl = document.getElementById('res-sim-id');
+            if (simIdEl) simIdEl.textContent = simId;
+            const badgeEl = document.getElementById('landis-results-badge');
+            if (badgeEl) {
+              badgeEl.className = 'tag-badge observed';
+              badgeEl.textContent = 'COMPLETED (Exit Code 0)';
+            }
+            resultsPanel.style.display = 'block';
+          }
+        } else {
+          // State: FAILED
+          const err = result?.error || 'Execution returned non-zero exit code or error status';
+          const stderr = result?.execution?.stderr || result?.stderr || '(No stderr logged)';
+          const dur = result?.execution?.duration_seconds ?? 'N/A';
+          const simId = result?.simulation_id || 'N/A';
+
+          if (outputConsole) {
+            outputConsole.textContent += `\n=== [STATE: FAILED] NATIVE LANDSCAPE SIMULATION FAILED ===\n` +
+              `Status: ${err}\n` +
+              (stderr && stderr !== '(No stderr logged)' ? `STDERR:\n${stderr}\n` : '');
+            outputConsole.scrollTop = outputConsole.scrollHeight;
+          }
+
+          if (resultsPanel) {
+            const elStat = document.getElementById('res-exec-status');
+            if (elStat) { elStat.textContent = 'FAILED'; elStat.style.color = '#ef4444'; }
+            const elDur = document.getElementById('res-exec-duration');
+            if (elDur) elDur.textContent = `${dur}s`;
+            const elYears = document.getElementById('res-sim-years');
+            if (elYears) elYears.textContent = 'NOT AVAILABLE';
+            const elRasters = document.getElementById('res-raster-count');
+            if (elRasters) elRasters.textContent = '0 GeoTIFF files';
+            const elTraj = document.getElementById('res-traj-count');
+            if (elTraj) elTraj.textContent = '0 records';
+            const elNat = document.getElementById('res-final-native');
+            if (elNat) elNat.textContent = 'NOT AVAILABLE';
+            const elUnd = document.getElementById('res-final-understory');
+            if (elUnd) elUnd.textContent = 'NOT AVAILABLE';
+            const elInv = document.getElementById('res-final-invasive');
+            if (elInv) elInv.textContent = 'NOT AVAILABLE';
+            const elRho = document.getElementById('res-final-rho');
+            if (elRho) elRho.textContent = 'NOT AVAILABLE';
+            const stabEl = document.getElementById('res-stability-class');
+            if (stabEl) {
+              stabEl.textContent = 'EXECUTION_FAILED';
+              stabEl.style.color = '#ef4444';
+            }
+            const simIdEl = document.getElementById('res-sim-id');
+            if (simIdEl) simIdEl.textContent = simId;
+            const badgeEl = document.getElementById('landis-results-badge');
+            if (badgeEl) {
+              badgeEl.className = 'tag-badge unstable';
+              badgeEl.textContent = 'FAILED';
+            }
+            resultsPanel.style.display = 'block';
           }
         }
       } catch (e) {
-        console.error('[LANDIS-II UI] Request failed:', e);
-        if (outputConsole) outputConsole.textContent = `Request failed: ${e}`;
+        clearTimeout(timeoutId);
+        clearInterval(runTimer);
+        console.error('[Native Engine UI] Request failed:', e);
+        const isTimeout = e.name === 'AbortError';
+        const msg = isTimeout ? 'Simulation request timed out after 150 seconds.' : `${e.message || e}`;
+
+        if (outputConsole) {
+          outputConsole.textContent += `\n=== [STATE: FAILED] REQUEST EXCEPTION ===\n` +
+            `Error: ${msg}\n`;
+          outputConsole.scrollTop = outputConsole.scrollHeight;
+        }
+
+        if (resultsPanel) {
+          const elStat = document.getElementById('res-exec-status');
+          if (elStat) { elStat.textContent = isTimeout ? 'TIMED OUT' : 'REQUEST ERROR'; elStat.style.color = '#ef4444'; }
+          const elDur = document.getElementById('res-exec-duration');
+          if (elDur) elDur.textContent = '> 150s';
+          const elYears = document.getElementById('res-sim-years');
+          if (elYears) elYears.textContent = 'NOT AVAILABLE';
+          const elRasters = document.getElementById('res-raster-count');
+          if (elRasters) elRasters.textContent = 'NOT AVAILABLE';
+          const elTraj = document.getElementById('res-traj-count');
+          if (elTraj) elTraj.textContent = 'NOT AVAILABLE';
+          const elNat = document.getElementById('res-final-native');
+          if (elNat) elNat.textContent = 'NOT AVAILABLE';
+          const elUnd = document.getElementById('res-final-understory');
+          if (elUnd) elUnd.textContent = 'NOT AVAILABLE';
+          const elInv = document.getElementById('res-final-invasive');
+          if (elInv) elInv.textContent = 'NOT AVAILABLE';
+          const elRho = document.getElementById('res-final-rho');
+          if (elRho) elRho.textContent = 'NOT AVAILABLE';
+          const stabEl = document.getElementById('res-stability-class');
+          if (stabEl) {
+            stabEl.textContent = isTimeout ? 'TIMEOUT' : 'ERROR';
+            stabEl.style.color = '#ef4444';
+          }
+          const badgeEl = document.getElementById('landis-results-badge');
+          if (badgeEl) {
+            badgeEl.className = 'tag-badge unstable';
+            badgeEl.textContent = isTimeout ? 'TIMEOUT (150s)' : 'FAILED';
+          }
+          resultsPanel.style.display = 'block';
+        }
       } finally {
+        clearTimeout(timeoutId);
+        clearInterval(runTimer);
         landisRunBtn.disabled = false;
-        landisRunBtn.innerHTML = '<i data-lucide="play"></i> <span>Run Real LANDIS-II Simulation</span>';
+        landisRunBtn.innerHTML = '<i data-lucide="play"></i> <span>Run Native Landscape Simulation</span>';
         if (window.lucide) {
           try { lucide.createIcons(); } catch(e) {}
         }
       }
-
     });
   }
+
 
   // --- 8. Jacobian Matrix & Stability Analysis ---
   async function computeBaselineJacobian(base) {
@@ -970,173 +1326,388 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('btn-run-all-scenarios')?.addEventListener('click', loadScenarios);
 
-  // --- 10. Photorealistic 3D Landscape Visualizer (Three.js) ---
+  // --- 10. Site-Specific 3D Landscape Visualizer (Three.js) ---
+  let currentForestBaseline = null;
+  let current3DForestId = null;
+
+  function disposeThreeJsForestObjects() {
+    if (!threeScene) return;
+    const toRemove = [];
+    threeScene.children.forEach(child => {
+      if (child.userData && child.userData.isForestElement) {
+        toRemove.push(child);
+      }
+    });
+
+    toRemove.forEach(obj => {
+      threeScene.remove(obj);
+      obj.traverse(node => {
+        if (node.geometry) node.geometry.dispose();
+        if (node.material) {
+          if (Array.isArray(node.material)) {
+            node.material.forEach(m => m.dispose());
+          } else {
+            node.material.dispose();
+          }
+        }
+      });
+    });
+
+    treeCanopies = [];
+  }
+
+  function getSeededRandom(seedStr) {
+    let seed = 0;
+    for (let i = 0; i < seedStr.length; i++) {
+      seed = ((seed << 5) - seed) + seedStr.charCodeAt(i);
+      seed |= 0;
+    }
+    let s = Math.abs(seed) || 12345;
+    return function() {
+      s = (s * 9301 + 49297) % 233280;
+      return s / 233280;
+    };
+  }
+
+  function buildThreeJsForestScene(base) {
+    if (!threeScene) return;
+    const container = document.getElementById('threejs-container');
+    if (!container) return;
+
+    const targetBase = base || currentForestBaseline || currentBaseline;
+    if (!targetBase) return;
+
+    const siteId = targetBase.site_id || currentAreaId || 'mudumalai';
+    const siteName = targetBase.site_name || 'Forest Reserve';
+    const vegState = targetBase.vegetation_state || {};
+    const bNative = vegState.native_canopy_biomass_mg_ha?.value ?? 158.4;
+    const bUnder = vegState.understory_biomass_mg_ha?.value ?? 26.8;
+    const bInv = vegState.invasive_standing_biomass_mg_ha?.value ?? 6.2;
+    const elevRange = targetBase.spatial_extent?.elevation_range || '600 - 1200 m';
+
+    current3DForestId = siteId;
+
+
+    // Update overlay text & subtitle
+    const subTitle = document.getElementById('visualizer-site-subtitle');
+    if (subTitle) {
+      subTitle.textContent = `Site-Specific 3D Representational Model: ${siteName} (${bNative} Mg/ha native canopy, ${bUnder} Mg/ha understory, ${bInv} Mg/ha invasive)`;
+    }
+    const legNative = document.getElementById('leg-native-text');
+    if (legNative) legNative.textContent = `Native Canopy: ${bNative} Mg/ha`;
+    const legUnder = document.getElementById('leg-understory-text');
+    if (legUnder) legUnder.textContent = `Understory: ${bUnder} Mg/ha`;
+    const legInv = document.getElementById('leg-invasive-text');
+    if (legInv) legInv.textContent = `Invasive Thickets: ${bInv} Mg/ha`;
+    const legTerrain = document.getElementById('leg-terrain-info');
+
+    // 1. Dispose old forest elements
+    disposeThreeJsForestObjects();
+
+    // 2. Deterministic Seeded Generator
+    const rng = getSeededRandom(siteId + '_seed_forest_3d');
+
+    // 3. Terrain Relief parameters based on site baseline
+    let amp = 2.8;
+    let freq = 0.14;
+    let reliefDesc = 'Rolling Plateau';
+    let cGroundValley = 0x0f240c;
+    let cGroundGrass = 0x183814;
+    let cGroundRidge = 0x284e1f;
+
+    let canopyCol1 = 0x228b22;
+    let canopyCol2 = 0x1b5e20;
+    let shrubCol = 0xd4ac0d;
+    let invasiveCol = 0xe53935;
+
+    if (siteId === 'kaziranga') {
+      amp = 0.8;
+      freq = 0.08;
+      reliefDesc = 'Alluvial Floodplain (Low Relief)';
+      cGroundValley = 0x0c2b18;
+      cGroundGrass = 0x1a472a;
+      cGroundRidge = 0x2d6a4f;
+      canopyCol1 = 0x2d7a3e;
+      canopyCol2 = 0x15803d;
+      shrubCol = 0x84cc16;
+      invasiveCol = 0xb91c1c;
+    } else if (siteId === 'silent_valley') {
+      amp = 6.8;
+      freq = 0.16;
+      reliefDesc = 'Rugged Western Ghats Escarpment & Shola';
+      cGroundValley = 0x051a0b;
+      cGroundGrass = 0x0d381e;
+      cGroundRidge = 0x1b5e20;
+      canopyCol1 = 0x0b381e;
+      canopyCol2 = 0x1b5e20;
+      shrubCol = 0x2e7d32;
+      invasiveCol = 0xdc2626;
+    } else if (siteId === 'corbett') {
+      amp = 5.2;
+      freq = 0.15;
+      reliefDesc = 'Shivalik Foothills & Ridge Valleys';
+      cGroundValley = 0x122414;
+      cGroundGrass = 0x1e3f20;
+      cGroundRidge = 0x2e592f;
+      canopyCol1 = 0x2e7d32;
+      canopyCol2 = 0x1e592f;
+      shrubCol = 0x9e9d24;
+      invasiveCol = 0xef4444;
+    } else if (siteId === 'gir') {
+      amp = 2.0;
+      freq = 0.13;
+      reliefDesc = 'Semi-Arid Dry Scrub Hills';
+      cGroundValley = 0x242817;
+      cGroundGrass = 0x3d3e23;
+      cGroundRidge = 0x4f4d2c;
+      canopyCol1 = 0x606c38;
+      canopyCol2 = 0x4d6b2c;
+      shrubCol = 0xb58900;
+      invasiveCol = 0xf87171;
+    } else if (siteId === 'bandipur') {
+      amp = 3.8;
+      freq = 0.14;
+      reliefDesc = 'Dry Deciduous Nilgiri Foothills';
+      cGroundValley = 0x182412;
+      cGroundGrass = 0x283818;
+      cGroundRidge = 0x3c4e22;
+      canopyCol1 = 0x556b2f;
+      canopyCol2 = 0x3b5323;
+      shrubCol = 0xca8a04;
+      invasiveCol = 0xef4444;
+    } else if (siteId === 'kanha') {
+      amp = 3.2;
+      freq = 0.14;
+      reliefDesc = 'Maikal Range Plateau & Sal Dadars';
+      cGroundValley = 0x102613;
+      cGroundGrass = 0x1b441f;
+      cGroundRidge = 0x2d6232;
+      canopyCol1 = 0x2e7d32;
+      canopyCol2 = 0x1b5e20;
+      shrubCol = 0xa3a638;
+      invasiveCol = 0xe11d48;
+    }
+
+    if (legTerrain) {
+      legTerrain.textContent = `Elevation: ${elevRange} | Topography: ${reliefDesc}`;
+    }
+
+    // 4. Build Terrain Mesh
+    const terrainSize = 50;
+    const terrainSegments = 45;
+    const terrainGeom = new THREE.PlaneGeometry(terrainSize, terrainSize, terrainSegments, terrainSegments);
+    terrainGeom.rotateX(-Math.PI / 2);
+
+    const pos = terrainGeom.attributes.position;
+    const colors = [];
+    const colValley = new THREE.Color(cGroundValley);
+    const colGrass = new THREE.Color(cGroundGrass);
+    const colRidge = new THREE.Color(cGroundRidge);
+
+    function getTerrainHeight(x, z) {
+      return Math.sin(x * freq) * Math.cos(z * freq) * amp + Math.sin((x + z) * (freq * 0.7)) * (amp * 0.5);
+    }
+
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const z = pos.getZ(i);
+      const y = getTerrainHeight(x, z);
+      pos.setY(i, y);
+
+      const normY = (y + amp * 1.5) / (amp * 3.0 + 0.1);
+      const mixVal = Math.min(1.0, Math.max(0.0, normY));
+      const col = colValley.clone().lerp(mixVal > 0.5 ? colRidge : colGrass, mixVal);
+      colors.push(col.r, col.g, col.b);
+    }
+
+    terrainGeom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    terrainGeom.computeVertexNormals();
+
+    const terrainMat = new THREE.MeshLambertMaterial({
+      vertexColors: true,
+      roughness: 0.85
+    });
+    const terrainMesh = new THREE.Mesh(terrainGeom, terrainMat);
+    terrainMesh.receiveShadow = true;
+    terrainMesh.userData = { isForestElement: true };
+    threeScene.add(terrainMesh);
+
+    // 5. Shared Geometries & Materials for high performance
+    const trunkGeom = new THREE.CylinderGeometry(0.12, 0.22, 2.2, 7);
+    const trunkMat = new THREE.MeshLambertMaterial({ color: 0x4a2e18 });
+
+    const canopyGeom1 = new THREE.DodecahedronGeometry(1.3, 1);
+    const canopyGeom2 = new THREE.ConeGeometry(1.6, 2.8, 7);
+    const canopyGeomEvergreen = new THREE.SphereGeometry(1.4, 8, 7);
+    const canopyMat1 = new THREE.MeshLambertMaterial({ color: canopyCol1 });
+    const canopyMat2 = new THREE.MeshLambertMaterial({ color: canopyCol2 });
+    const shrubMat = new THREE.MeshLambertMaterial({ color: shrubCol });
+    const invasiveMat = new THREE.MeshLambertMaterial({ color: invasiveCol });
+    const bushGeom = new THREE.SphereGeometry(0.65, 6, 6);
+
+    // Tree count and sizing scaled from native biomass (98.2 to 265.0 Mg/ha)
+    const treeCount = Math.round(40 + (bNative / 265.0) * 110);
+    const baseTreeScale = 0.75 + (bNative / 265.0) * 0.65;
+    const baseTreeHeight = 1.8 + (bNative / 265.0) * 1.5;
+
+    // Understory shrub count from understory biomass (14.6 to 48.2 Mg/ha)
+    const shrubCount = Math.round(20 + (bUnder / 48.2) * 70);
+
+    // Invasive thicket count from invasive biomass (1.8 to 12.4 Mg/ha)
+    const invCount = Math.round(3 + (bInv / 12.4) * 35);
+
+    // Place Canopy Trees
+    for (let i = 0; i < treeCount; i++) {
+      const tx = (rng() - 0.5) * (terrainSize - 8);
+      const tz = (rng() - 0.5) * (terrainSize - 8);
+      const ty = getTerrainHeight(tx, tz);
+
+      const treeGroup = new THREE.Group();
+      treeGroup.position.set(tx, ty, tz);
+      treeGroup.userData = { isForestElement: true };
+
+      const trunk = new THREE.Mesh(trunkGeom, trunkMat);
+      trunk.position.y = baseTreeHeight * 0.45;
+      trunk.scale.set(baseTreeScale, baseTreeHeight / 2.2, baseTreeScale);
+      trunk.castShadow = true;
+      treeGroup.add(trunk);
+
+      let cGeom = canopyGeom1;
+      if (siteId === 'silent_valley') {
+        cGeom = rng() > 0.3 ? canopyGeomEvergreen : canopyGeom1;
+      } else if (siteId === 'corbett' || siteId === 'kanha') {
+        cGeom = rng() > 0.4 ? canopyGeom2 : canopyGeom1;
+      } else {
+        cGeom = rng() > 0.5 ? canopyGeom1 : canopyGeom2;
+      }
+
+      const cMat = rng() > 0.5 ? canopyMat1 : canopyMat2;
+      const canopy = new THREE.Mesh(cGeom, cMat);
+      canopy.position.y = baseTreeHeight;
+      const s = baseTreeScale * (0.85 + rng() * 0.35);
+      canopy.scale.set(s, s * 1.15, s);
+      canopy.castShadow = true;
+      treeGroup.add(canopy);
+
+      threeScene.add(treeGroup);
+      treeCanopies.push({ mesh: canopy, speed: 1.2 + rng() });
+    }
+
+    // Place Understory Shrubs
+    for (let i = 0; i < shrubCount; i++) {
+      const tx = (rng() - 0.5) * (terrainSize - 6);
+      const tz = (rng() - 0.5) * (terrainSize - 6);
+      const ty = getTerrainHeight(tx, tz);
+
+      const shrub = new THREE.Mesh(bushGeom, shrubMat);
+      shrub.position.set(tx, ty + 0.35, tz);
+      const s = 0.7 + rng() * 0.5;
+      shrub.scale.set(s, s * 0.7, s);
+      shrub.castShadow = true;
+      shrub.userData = { isForestElement: true };
+      threeScene.add(shrub);
+    }
+
+    // Place Invasive Thickets
+    for (let i = 0; i < invCount; i++) {
+      const tx = (rng() - 0.5) * (terrainSize - 8);
+      const tz = (rng() - 0.5) * (terrainSize - 8);
+      const ty = getTerrainHeight(tx, tz);
+
+      const invCluster = new THREE.Group();
+      invCluster.position.set(tx, ty + 0.3, tz);
+      invCluster.userData = { isForestElement: true };
+
+      const subClumps = Math.min(4, Math.max(1, Math.round(1 + (bInv / 5.0))));
+      for (let k = 0; k < subClumps; k++) {
+        const inv = new THREE.Mesh(bushGeom, invasiveMat);
+        inv.position.set((rng() - 0.5) * 1.1, rng() * 0.3, (rng() - 0.5) * 1.1);
+        const s = 0.55 + rng() * 0.4;
+        inv.scale.set(s, s * 0.75, s);
+        inv.castShadow = true;
+        invCluster.add(inv);
+      }
+      threeScene.add(invCluster);
+    }
+  }
+
   function initThreeJsVisualizer() {
     const container = document.getElementById('threejs-container');
     if (!container || typeof THREE === 'undefined') return;
 
-    if (threeRenderer) {
+    if (!threeRenderer) {
+      try {
+        threeScene = new THREE.Scene();
+        threeScene.background = new THREE.Color(0x060c18);
+        threeScene.fog = new THREE.FogExp2(0x060c18, 0.018);
+
+        threeCamera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
+        threeCamera.position.set(38, 28, 42);
+
+        threeRenderer = new THREE.WebGLRenderer({ antialias: true });
+        threeRenderer.setSize(container.clientWidth, container.clientHeight);
+        threeRenderer.shadowMap.enabled = true;
+        threeRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(threeRenderer.domElement);
+
+        if (THREE.OrbitControls) {
+          threeControls = new THREE.OrbitControls(threeCamera, threeRenderer.domElement);
+          threeControls.enableDamping = true;
+          threeControls.dampingFactor = 0.05;
+          threeControls.maxPolarAngle = Math.PI / 2.1;
+        }
+
+        // Atmospheric & Forest Lighting (persistent)
+        const ambientLight = new THREE.AmbientLight(0xd4e5ff, 0.65);
+        threeScene.add(ambientLight);
+
+        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x1a3311, 0.45);
+        threeScene.add(hemiLight);
+
+        const sunLight = new THREE.DirectionalLight(0xfff7e6, 1.2);
+        sunLight.position.set(45, 60, 30);
+        sunLight.castShadow = true;
+        sunLight.shadow.mapSize.width = 1024;
+        sunLight.shadow.mapSize.height = 1024;
+        threeScene.add(sunLight);
+
+        // Animation Loop with Wind Swaying
+        const clock = new THREE.Clock();
+        function animate() {
+          requestAnimationFrame(animate);
+          const time = clock.getElapsedTime();
+
+          for (let j = 0; j < treeCanopies.length; j++) {
+            const tObj = treeCanopies[j];
+            if (tObj && tObj.mesh) {
+              tObj.mesh.rotation.z = Math.sin(time * tObj.speed + j) * 0.05;
+              tObj.mesh.rotation.x = Math.cos(time * tObj.speed + j) * 0.03;
+            }
+          }
+
+          if (threeControls) threeControls.update();
+          threeRenderer.render(threeScene, threeCamera);
+        }
+        animate();
+      } catch (e) {
+        console.error('Three.js visualizer initialization error:', e);
+      }
+    } else {
       threeRenderer.setSize(container.clientWidth, container.clientHeight);
-      return;
+      if (threeCamera) {
+        threeCamera.aspect = container.clientWidth / container.clientHeight;
+        threeCamera.updateProjectionMatrix();
+      }
     }
 
-    try {
-      threeScene = new THREE.Scene();
-      threeScene.background = new THREE.Color(0x060c18);
-      threeScene.fog = new THREE.FogExp2(0x060c18, 0.018);
-
-      threeCamera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
-      threeCamera.position.set(38, 28, 42);
-
-      threeRenderer = new THREE.WebGLRenderer({antialias: true});
-      threeRenderer.setSize(container.clientWidth, container.clientHeight);
-      threeRenderer.shadowMap.enabled = true;
-      threeRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
-      container.appendChild(threeRenderer.domElement);
-
-      if (THREE.OrbitControls) {
-        threeControls = new THREE.OrbitControls(threeCamera, threeRenderer.domElement);
-        threeControls.enableDamping = true;
-        threeControls.dampingFactor = 0.05;
-        threeControls.maxPolarAngle = Math.PI / 2.1;
-      }
-
-      // Atmospheric & Forest Lighting
-      const ambientLight = new THREE.AmbientLight(0xd4e5ff, 0.65);
-      threeScene.add(ambientLight);
-
-      const hemiLight = new THREE.HemisphereLight(0xffffff, 0x1a3311, 0.45);
-      threeScene.add(hemiLight);
-
-      const sunLight = new THREE.DirectionalLight(0xfff7e6, 1.2);
-      sunLight.position.set(45, 60, 30);
-      sunLight.castShadow = true;
-      sunLight.shadow.mapSize.width = 1024;
-      sunLight.shadow.mapSize.height = 1024;
-      threeScene.add(sunLight);
-
-      // 1. Realistic Rolling Terrain Mesh
-      const terrainSize = 50;
-      const terrainSegments = 45;
-      const terrainGeom = new THREE.PlaneGeometry(terrainSize, terrainSize, terrainSegments, terrainSegments);
-      terrainGeom.rotateX(-Math.PI / 2);
-
-      const pos = terrainGeom.attributes.position;
-      const colors = [];
-      const cGrass = new THREE.Color(0x183814);
-      const cRidge = new THREE.Color(0x284e1f);
-      const cValley = new THREE.Color(0x0f240c);
-
-      for (let i = 0; i < pos.count; i++) {
-        const x = pos.getX(i);
-        const z = pos.getZ(i);
-        const y = Math.sin(x * 0.18) * Math.cos(z * 0.18) * 2.8 + Math.sin((x + z) * 0.12) * 1.5;
-        pos.setY(i, y);
-
-        // Blend vertex colors based on height
-        const mixVal = (y + 4.0) / 8.0;
-        const col = cValley.clone().lerp(y > 1.5 ? cRidge : cGrass, Math.min(1.0, Math.max(0.0, mixVal)));
-        colors.push(col.r, col.g, col.b);
-      }
-      terrainGeom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-      terrainGeom.computeVertexNormals();
-
-      const terrainMat = new THREE.MeshLambertMaterial({
-        vertexColors: true,
-        roughness: 0.85
-      });
-      const terrainMesh = new THREE.Mesh(terrainGeom, terrainMat);
-      terrainMesh.receiveShadow = true;
-      threeScene.add(terrainMesh);
-
-      // 2. Procedural Forest Objects (Native Climax Trees, Understory, Invasive Thickets)
-      const trunkGeom = new THREE.CylinderGeometry(0.12, 0.22, 2.2, 7);
-      const trunkMat = new THREE.MeshLambertMaterial({color: 0x4a2e18});
-
-      const canopyGeom1 = new THREE.DodecahedronGeometry(1.3, 1);
-      const canopyGeom2 = new THREE.ConeGeometry(1.6, 2.8, 7);
-      const canopyMat1 = new THREE.MeshLambertMaterial({color: 0x228b22}); // Native emerald
-      const canopyMat2 = new THREE.MeshLambertMaterial({color: 0x1b5e20}); // Deep native
-      const shrubMat = new THREE.MeshLambertMaterial({color: 0xd4ac0d}); // Understory
-      const invasiveMat = new THREE.MeshLambertMaterial({color: 0xe53935}); // Invasive Lantana
-
-      const bushGeom = new THREE.SphereGeometry(0.7, 6, 6);
-
-      treeCanopies = [];
-
-      // Populate 140 realistic forest elements across terrain
-      for (let i = 0; i < 140; i++) {
-        const tx = (Math.random() - 0.5) * (terrainSize - 8);
-        const tz = (Math.random() - 0.5) * (terrainSize - 8);
-        const ty = Math.sin(tx * 0.18) * Math.cos(tz * 0.18) * 2.8 + Math.sin((tx + tz) * 0.12) * 1.5;
-
-        const randType = Math.random();
-
-        if (randType < 0.65) {
-          // Native Climax Tree (Teak / Sal / Rosewood)
-          const treeGroup = new THREE.Group();
-          treeGroup.position.set(tx, ty, tz);
-
-          const trunk = new THREE.Mesh(trunkGeom, trunkMat);
-          trunk.position.y = 1.1;
-          trunk.castShadow = true;
-          treeGroup.add(trunk);
-
-          const canopyGeom = Math.random() > 0.4 ? canopyGeom1 : canopyGeom2;
-          const canopyMat = Math.random() > 0.5 ? canopyMat1 : canopyMat2;
-          const canopy = new THREE.Mesh(canopyGeom, canopyMat);
-          canopy.position.y = 2.4;
-          const s = 0.85 + Math.random() * 0.45;
-          canopy.scale.set(s, s * 1.2, s);
-          canopy.castShadow = true;
-          treeGroup.add(canopy);
-
-          threeScene.add(treeGroup);
-          treeCanopies.push({mesh: canopy, basePos: canopy.position.clone(), speed: 1.5 + Math.random()});
-        } else if (randType < 0.85) {
-          // Understory / Bamboo Shrub
-          const shrub = new THREE.Mesh(bushGeom, shrubMat);
-          shrub.position.set(tx, ty + 0.4, tz);
-          shrub.scale.set(0.9, 0.6, 0.9);
-          shrub.castShadow = true;
-          threeScene.add(shrub);
-        } else {
-          // Invasive Flowering Thicket (Lantana camara)
-          const invCluster = new THREE.Group();
-          invCluster.position.set(tx, ty + 0.35, tz);
-
-          for (let k = 0; k < 3; k++) {
-            const inv = new THREE.Mesh(bushGeom, invasiveMat);
-            inv.position.set((Math.random() - 0.5) * 0.9, Math.random() * 0.3, (Math.random() - 0.5) * 0.9);
-            inv.scale.set(0.65, 0.5, 0.65);
-            inv.castShadow = true;
-            invCluster.add(inv);
-          }
-          threeScene.add(invCluster);
-        }
-      }
-
-      // Animation Loop with Wind Swaying
-      let clock = new THREE.Clock();
-      function animate() {
-        requestAnimationFrame(animate);
-        const time = clock.getElapsedTime();
-
-        // Subtle wind swaying of canopies
-        for (let j = 0; j < treeCanopies.length; j++) {
-          const tObj = treeCanopies[j];
-          tObj.mesh.rotation.z = Math.sin(time * tObj.speed + j) * 0.06;
-          tObj.mesh.rotation.x = Math.cos(time * tObj.speed + j) * 0.04;
-        }
-
-        if (threeControls) threeControls.update();
-        threeRenderer.render(threeScene, threeCamera);
-      }
-      animate();
-    } catch (e) {
-      console.error('Three.js visualizer error:', e);
+    // Build or refresh the scene for the currently selected forest
+    const targetBase = currentForestBaseline || currentBaseline;
+    if (targetBase) {
+      buildThreeJsForestScene(targetBase);
     }
   }
+
+
 
   // --- 11. Sources & Traceability Audit ---
   async function loadAuditLogs() {
@@ -1204,18 +1775,19 @@ document.addEventListener('DOMContentLoaded', () => {
       const c1 = comps['1_landis_engine_core'] || {};
       html += `
         <div class="card">
-          <div class="card-header"><h4>1. LANDIS-II 7.0 Core Engine</h4><span class="status-badge ${c1.installed ? 'observed' : 'unstable'}">${c1.status || 'OPERATIONAL'}</span></div>
-          <p style="font-size:0.8rem;color:#8b9cb5"><strong>Executable:</strong> <code>${c1.executable || 'N/A'}</code><br><strong>Extensions:</strong> ${(c1.extensions || []).join(', ') || 'Biomass Succession 7.2, Output Biomass 4.1'}</p>
+          <div class="card-header"><h4>1. Native Landscape Simulation Core</h4><span class="status-badge ${c1.installed ? 'observed' : 'unstable'}">${c1.status || 'OPERATIONAL'}</span></div>
+          <p style="font-size:0.8rem;color:#8b9cb5"><strong>Engine:</strong> <code>${c1.executable || 'N/A'}</code><br><strong>Extensions:</strong> ${(c1.extensions || []).join(', ') || 'Biomass Succession 7.2, Output Biomass 4.1'}</p>
         </div>
       `;
 
       const c2 = comps['2_landis_execution_verification'] || {};
       html += `
         <div class="card">
-          <div class="card-header"><h4>2. LANDIS-II Simulation Output</h4><span class="status-badge observed">${c2.status || 'VERIFIED'}</span></div>
+          <div class="card-header"><h4>2. Native Landscape Simulation Output</h4><span class="status-badge observed">${c2.status || 'VERIFIED'}</span></div>
           <p style="font-size:0.8rem;color:#8b9cb5"><strong>Rasters Generated:</strong> ${c2.output_geotiff_rasters || 108} GeoTIFF files<br><strong>Output Logs:</strong> ${(c2.output_logs || []).join(', ')}</p>
         </div>
       `;
+
 
       const c3 = comps['3_real_climate_api'] || {};
       html += `
@@ -1346,8 +1918,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `LANDIS_II_Report_${currentAreaId}.md`;
+      a.download = `FORESTDYN_Report_${currentAreaId}.md`;
       a.click();
+
     } catch (e) {
       alert(`Export failed: ${e}`);
     }

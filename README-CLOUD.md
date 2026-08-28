@@ -1,8 +1,10 @@
-# Cloud Deployment Guide — LANDIS-II Coupled India Forest Scientific Platform
+# Cloud Deployment Guide — FORESTDYN Scientific Platform
+### Nonlinear Forest Ecosystem Dynamics | Spatial Modelling • Stability Analysis • Invasion Risk
 
 ## 1. System Architecture Overview
 
-The **LANDIS-II India Forest Landscape Decision Support & Ecological Intelligence Platform** utilizes a robust dual-layer architecture designed for high availability, cloud portability, and scientific rigor:
+The **FORESTDYN Platform** utilizes a robust dual-layer architecture designed for high availability, cloud portability, and scientific rigor:
+
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐

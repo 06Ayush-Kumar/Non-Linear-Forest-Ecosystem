@@ -44,7 +44,8 @@ def create_app() -> Flask:
         landis_ready = is_landis_installed()
         return jsonify({
             "status": "healthy",
-            "service": "LANDIS-II India Forest Landscape Decision Support & Intelligence Platform",
+            "service": "FORESTDYN — Nonlinear Forest Ecosystem Dynamics Platform",
+            "subtitle": "Spatial Modelling • Stability Analysis • Invasion Risk",
             "timestamp": datetime.now().isoformat(),
             "platform_os": sys.platform,
             "environment": "windows_workstation" if sys.platform.startswith("win") else "linux_cloud",
@@ -63,7 +64,8 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     url = f"http://127.0.0.1:{port}/"
     print("=" * 70)
-    print("LANDIS-II Coupled India Forest Decision Support & Intelligence Platform")
+    print("FORESTDYN — Nonlinear Forest Ecosystem Dynamics")
+    print("Spatial Modelling • Stability Analysis • Invasion Risk")
     print(f"Scientific Workstation active on http://{host}:{port}/")
     print("=" * 70)
     
@@ -73,6 +75,7 @@ if __name__ == "__main__":
             webbrowser.open(url)
         except Exception:
             pass
+
 
     app.run(host=host, port=port, debug=False, use_reloader=False, threaded=True)
 
