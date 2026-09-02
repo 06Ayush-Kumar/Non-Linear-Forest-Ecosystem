@@ -1,6 +1,6 @@
 # LANDIS-II Coupled India Forest Decision Support & Ecological Intelligence Platform
 
-An academic and research-grade decision-support system coupling the **LANDIS-II Forest Landscape Simulation Framework** with our original **Nonlinear Population Dynamics, Spatial Invasive Spread, and Jacobian Stability Analysis Layer** for Indian forest ecosystems.
+An academic and research-grade decision-support system coupling the **LANDIS-II Forest Landscape Simulation Framework** with our original **Nonlinear Population Dynamics, Spatial Invasive Spread  and Jacobian Stability Analysis Layer** for Indian forest ecosystems.
 
 ---
 
