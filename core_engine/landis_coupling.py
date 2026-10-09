@@ -11,6 +11,7 @@ Scientific Separation:
 
 from __future__ import annotations
 import os
+import sys
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 import numpy as np
@@ -40,14 +41,66 @@ def run_coupled_landis_stability_pipeline(
 ) -> Dict[str, Any]:
     """
     Complete end-to-end pipeline:
-    1. Optionally creates a fresh isolated run directory with input/, output/, logs/, metadata/.
-    2. Executes the official LANDIS-II simulation.
-    3. Parses actual newly generated output CSV logs and GeoTIFF maps.
-    4. Extracts state variables [x, y, z] across time steps.
-    5. Evaluates continuous & discrete Jacobian, eigenvalues, and spectral radius for each step.
-    6. Runs numerical finite-difference cross-check.
-    7. Returns structured scientific results with full provenance.
+    1. On Linux/cloud: Never executes native engine, returns clean UNAVAILABLE_ON_LINUX structure.
+    2. On Windows: Optionally creates a fresh isolated run directory with input/, output/, logs/, metadata/.
+    3. Executes the official LANDIS-II simulation.
+    4. Parses actual newly generated output CSV logs and GeoTIFF maps.
+    5. Extracts state variables [x, y, z] across time steps.
+    6. Evaluates continuous & discrete Jacobian, eigenvalues, and spectral radius for each step.
+    7. Runs numerical finite-difference cross-check.
+    8. Returns structured scientific results with full provenance.
     """
+    # 1. Platform Detection
+    if not sys.platform.startswith("win"):
+        return {
+            "success": False,
+            "status": "UNAVAILABLE_ON_LINUX",
+            "execution_available": False,
+            "reason": "Native Landscape Engine requires Windows runtime.",
+            "error": "Native Landscape Engine requires Windows .NET/GDAL runtime. This Linux cloud deployment executes the Layer 2/3 Reduced-Order Spatial Simulator.",
+            "platform": "Linux",
+            "execution": {
+                "success": False,
+                "status": "UNAVAILABLE_ON_LINUX",
+                "execution_available": False,
+                "reason": "Native Landscape Engine requires Windows runtime.",
+                "return_code": None,
+                "duration_seconds": None,
+                "stdout": "",
+                "stderr": "NATIVE_LANDSCAPE_ENGINE_UNAVAILABLE_ON_LINUX"
+            },
+            "stability_trajectory": [],
+            "provenance": {
+                "engine": "LANDIS-II v7.0",
+                "platform": "Linux",
+                "status": "UNAVAILABLE_ON_LINUX"
+            }
+        }
+
+    if not is_landis_installed():
+        return {
+            "success": False,
+            "status": "NEEDS_BUILD",
+            "execution_available": False,
+            "reason": "LANDIS-II executable not found in build_landis/bin.",
+            "error": "LANDIS-II executable not found in build_landis/bin.",
+            "execution": {
+                "success": False,
+                "status": "NEEDS_BUILD",
+                "execution_available": False,
+                "reason": "LANDIS-II executable not found in build_landis/bin.",
+                "return_code": -1,
+                "duration_seconds": 0.0,
+                "stdout": "",
+                "stderr": "LANDIS_EXE_NOT_FOUND"
+            },
+            "stability_trajectory": [],
+            "provenance": {
+                "engine": "LANDIS-II v7.0",
+                "status": "NEEDS_BUILD"
+            }
+        }
+
     t_start = time.time()
     if not simulation_id:
         area_tag = area_id if area_id else "sim"
@@ -59,14 +112,15 @@ def run_coupled_landis_stability_pipeline(
     if create_isolated_dir:
         from .landis_executor import RUNS_DIR
         target_run_dir = RUNS_DIR / simulation_id
-        create_fresh_scenario_directory(working_path, target_run_dir)
-        working_path = target_run_dir
+        if working_path.exists():
+            create_fresh_scenario_directory(working_path, target_run_dir)
+            working_path = target_run_dir
 
     # 1. Execute LANDIS-II
     exec_result = execute_landis_simulation(
         scenario_file=scenario_file,
         working_dir=working_path,
-        timeout_seconds=120
+        timeout_seconds=240
     )
 
     # Save log file in working directory logs subfolder

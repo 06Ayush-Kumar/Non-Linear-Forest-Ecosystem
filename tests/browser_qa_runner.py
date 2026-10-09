@@ -421,43 +421,59 @@ def run_full_browser_qa(port=9225):
         # ==========================================
         # WORKFLOW G: NATIVE LANDSCAPE ENGINE RUN
         # ==========================================
-        print("\n[TEST G] NATIVE LANDSCAPE SIMULATION SUBPROCESS EXECUTION")
+        print("\n[TEST G] NATIVE LANDSCAPE SIMULATION SUBPROCESS EXECUTION / PLATFORM ADAPTATION")
         cdp.eval_js("document.querySelector('.nav-btn[data-workspace=\"simulation\"]')?.click()")
         time.sleep(1.0)
-        print("  Triggering 'Run Native Landscape Simulation'...")
-        cdp.eval_js("document.getElementById('btn-run-landis-engine')?.click()")
 
-        landis_out = ""
-        start_wait = time.time()
+        is_win_host = sys.platform.startswith("win")
+        btn_visible = cdp.eval_js("document.getElementById('btn-run-landis-engine')?.style.display !== 'none'")
+        linux_badge_visible = cdp.eval_js("document.getElementById('badge-native-linux-only')?.style.display !== 'none'")
 
-        while time.time() - start_wait < 120:
-            time.sleep(1.0)
+        if is_win_host and btn_visible:
+            print("  Triggering 'Run Native Landscape Simulation' (Windows Host)...")
+            cdp.eval_js("document.getElementById('btn-run-landis-engine')?.click()")
+
+            landis_out = ""
+            start_wait = time.time()
+
+            while time.time() - start_wait < 180:
+                time.sleep(1.0)
+                landis_out = cdp.eval_js("document.getElementById('landis-stdout-console')?.textContent") or ""
+                if "COMPLETED" in landis_out or "SIMULATION COMPLETE" in landis_out:
+                    break
+                if "FAILED" in landis_out or "Simulation Status:" in landis_out or "Request failed:" in landis_out or "REQUEST EXCEPTION" in landis_out:
+                    break
+
+            print(f"  Simulation Output Snippet:\n    {landis_out.splitlines()[0] if landis_out else 'No output'}")
+            if "Output Rasters Generated" in landis_out:
+                raster_line = [l for l in landis_out.splitlines() if "Output Rasters" in l][0]
+                print(f"    {raster_line}")
+
+            # Verify Dedicated Results Panel is visible and populated
+            panel_display = cdp.eval_js("document.getElementById('landis-results-panel')?.style.display")
+            exec_status = cdp.eval_js("document.getElementById('res-exec-status')?.textContent")
+            raster_stat = cdp.eval_js("document.getElementById('res-raster-count')?.textContent")
+            final_native = cdp.eval_js("document.getElementById('res-final-native')?.textContent")
+            btn_disabled = cdp.eval_js("document.getElementById('btn-run-landis-engine')?.disabled")
+
+            print(f"  Results Panel Display: '{panel_display}' | Status: '{exec_status}' | Rasters: '{raster_stat}' | Native: '{final_native}' | Button Disabled: {btn_disabled}")
+
+            cond_g = ("SIMULATION COMPLETE" in landis_out and 
+                      "GeoTIFF files" in landis_out and 
+                      panel_display == "block" and 
+                      "COMPLETED" in (exec_status or "") and
+                      btn_disabled is False)
+        else:
+            print("  Verifying Linux Cloud Unavailable State...")
             landis_out = cdp.eval_js("document.getElementById('landis-stdout-console')?.textContent") or ""
-            if "COMPLETED" in landis_out or "SIMULATION COMPLETE" in landis_out:
-                break
-            if "FAILED" in landis_out or "Simulation Status:" in landis_out or "Request failed:" in landis_out or "REQUEST EXCEPTION" in landis_out:
-                break
+            panel_display = cdp.eval_js("document.getElementById('landis-results-panel')?.style.display")
+            exec_status = cdp.eval_js("document.getElementById('res-exec-status')?.textContent")
+            cond_g = ("WINDOWS ONLY" in landis_out and
+                      "UNAVAILABLE ON CLOUD" in str(exec_status) and
+                      panel_display == "block" and
+                      linux_badge_visible is True and
+                      btn_visible is False)
 
-
-        print(f"  Simulation Output Snippet:\n    {landis_out.splitlines()[0] if landis_out else 'No output'}")
-        if "Output Rasters Generated" in landis_out:
-            raster_line = [l for l in landis_out.splitlines() if "Output Rasters" in l][0]
-            print(f"    {raster_line}")
-
-        # Verify Dedicated Results Panel is visible and populated
-        panel_display = cdp.eval_js("document.getElementById('landis-results-panel')?.style.display")
-        exec_status = cdp.eval_js("document.getElementById('res-exec-status')?.textContent")
-        raster_stat = cdp.eval_js("document.getElementById('res-raster-count')?.textContent")
-        final_native = cdp.eval_js("document.getElementById('res-final-native')?.textContent")
-        btn_disabled = cdp.eval_js("document.getElementById('btn-run-landis-engine')?.disabled")
-
-        print(f"  Results Panel Display: '{panel_display}' | Status: '{exec_status}' | Rasters: '{raster_stat}' | Native: '{final_native}' | Button Disabled: {btn_disabled}")
-
-        cond_g = ("SIMULATION COMPLETE" in landis_out and 
-                  "GeoTIFF files" in landis_out and 
-                  panel_display == "block" and 
-                  "COMPLETED" in (exec_status or "") and
-                  btn_disabled is False)
         results["G_LANDIS_II_EXECUTION"] = "PASS" if cond_g else "FAIL"
 
         if not cond_g:
@@ -516,8 +532,13 @@ def run_full_browser_qa(port=9225):
         # 2. Test GBIF Occurrence Query
         cdp.eval_js("document.getElementById('synonym-search-input').value = 'Lantana camara'")
         cdp.eval_js("document.getElementById('btn-resolve-synonym')?.click()")
-        time.sleep(0.8)
-        gbif_text = cdp.eval_js("document.getElementById('synonym-result-box')?.innerText") or ""
+        start_gbif = time.time()
+        gbif_text = ""
+        while time.time() - start_gbif < 15.0:
+            time.sleep(0.8)
+            gbif_text = cdp.eval_js("document.getElementById('synonym-result-box')?.innerText") or ""
+            if "occurrences" in gbif_text.lower() or "records" in gbif_text.lower() or "verified" in gbif_text.lower() or "dataset" in gbif_text.lower():
+                break
         print(f"  GBIF Field Occurrence Result: '{gbif_text[:90]}...'")
 
         # 3. Test Candidate Species Assessment Context

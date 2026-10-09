@@ -39,12 +39,14 @@ def get_landis_metadata() -> Dict[str, Any]:
     status_str = "OPERATIONAL" if installed else ("UNAVAILABLE_ON_LINUX" if is_linux else "NEEDS_BUILD")
     return {
         "installed": installed,
+        "execution_available": installed,
         "engine_name": "LANDIS-II Forest Landscape Simulation Framework",
-        "core_version": "7.0 (Release build with Roslyn C# Compiler)",
+        "core_version": "7.0 (Release build with Roslyn C# Compiler)" if installed else "7.0 (Windows .NET Framework 4.8 Runtime Required)",
         "target_framework": ".NET Standard 2.0 / .NET Framework 4.8 Runtime",
         "executable_path": str(LANDIS_EXE) if installed else ("NOT_SUPPORTED_ON_LINUX" if is_linux else "NOT_FOUND"),
         "platform_os": sys.platform,
         "cloud_mode_active": is_linux,
+        "reason": "Native Landscape Engine requires Windows runtime." if is_linux else None,
         "cloud_message": "LANDIS-II native engine unavailable in this Linux environment. (Requires Windows .NET Framework 4.8 & GDAL runtime. Layer 2 Reduced-Order Spatial Simulator active)." if is_linux else None,
         "installed_extensions": [
             {
@@ -62,7 +64,7 @@ def get_landis_metadata() -> Dict[str, Any]:
                 "class": "Landis.Extension.Output.Biomass.PlugIn"
             }
         ] if installed else [],
-        "raster_io": "GDAL 2.0.2 / Gdal.Core Native Integration (GeoTIFF / GIS)",
+        "raster_io": "GDAL 2.0.2 / Gdal.Core Native Integration (GeoTIFF / GIS)" if installed else "NOT_SUPPORTED_ON_LINUX",
         "status": status_str
     }
 
@@ -83,9 +85,15 @@ def create_fresh_scenario_directory(
     """
     Creates a fresh, clean simulation directory copying ONLY scenario input files.
     Strictly excludes all previous output logs, rasters, and temp metadata.
+    Platform-aware: safely bypasses on Linux or when source directory does not exist.
     """
-    src = Path(source_dir).resolve()
     dst = Path(target_dir).resolve()
+    if not sys.platform.startswith("win"):
+        return dst
+
+    src = Path(source_dir).resolve()
+    if not src.exists():
+        return dst
 
     if dst.exists():
         shutil.rmtree(dst, ignore_errors=True)
@@ -117,27 +125,34 @@ def create_fresh_scenario_directory(
 
 
 def execute_landis_simulation(
-
     scenario_file: str,
     working_dir: str | Path,
-    timeout_seconds: int = 120
+    timeout_seconds: int = 240
 ) -> Dict[str, Any]:
     """
     Executes Landis.Console.exe on the specified scenario file within working_dir.
     Returns execution metadata, return code, logs, and execution duration.
+    On Linux/cloud: Never attempts subprocess execution and returns clean UNAVAILABLE_ON_LINUX structure.
     """
-    if not is_landis_installed():
-        if not sys.platform.startswith("win"):
-            return {
-                "success": False,
-                "error": "LANDIS-II native engine unavailable in this Linux environment. (Requires Windows .NET Framework 4.8 & GDAL runtime. Please use the Layer 2 Reduced-Order Spatial Simulator for cloud modeling).",
-                "return_code": -1,
-                "stdout": "",
-                "stderr": "NATIVE_LANDIS_II_UNAVAILABLE_ON_LINUX",
-                "duration_seconds": 0.0
-            }
+    if not sys.platform.startswith("win"):
         return {
             "success": False,
+            "status": "UNAVAILABLE_ON_LINUX",
+            "execution_available": False,
+            "reason": "Native Landscape Engine requires Windows runtime.",
+            "error": "Native Landscape Engine requires Windows .NET/GDAL runtime. This Linux cloud deployment executes the Layer 2/3 Reduced-Order Spatial Simulator.",
+            "return_code": None,
+            "stdout": "",
+            "stderr": "NATIVE_LANDSCAPE_ENGINE_UNAVAILABLE_ON_LINUX",
+            "duration_seconds": None
+        }
+
+    if not is_landis_installed():
+        return {
+            "success": False,
+            "status": "NEEDS_BUILD",
+            "execution_available": False,
+            "reason": "LANDIS-II executable not found in build_landis/bin.",
             "error": "LANDIS-II executable not found in build_landis/bin.",
             "return_code": -1,
             "stdout": "",
@@ -145,16 +160,17 @@ def execute_landis_simulation(
             "duration_seconds": 0.0
         }
 
-
     working_path = Path(working_dir).resolve()
     scenario_path = working_path / scenario_file
     if not scenario_path.exists():
         return {
             "success": False,
+            "status": "SCENARIO_NOT_FOUND",
+            "execution_available": False,
             "error": f"Scenario file not found: {scenario_path}",
             "return_code": -1,
             "stdout": "",
-            "stderr": "",
+            "stderr": "SCENARIO_FILE_NOT_FOUND",
             "duration_seconds": 0.0
         }
 

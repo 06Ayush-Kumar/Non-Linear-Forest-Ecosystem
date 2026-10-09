@@ -356,6 +356,23 @@
               <span class="scale-text">Grid Scale: 30 &times; 30 cells (900 ha) | Local Kinetics: 4th-Order Runge-Kutta | Spatial Diffusion: D_z &nabla;&sup2;z (0.045 ha/yr)</span>
             </div>
 
+            <!-- 4-Tier Scientific Data Provenance Legend -->
+            <div class="provenance-legend-banner" style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;background:#0b1120;border:1px solid #1e293b;border-radius:6px;padding:0.5rem 0.75rem;margin-bottom:0.75rem;font-size:0.75rem;">
+              <span style="color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin-right:0.25rem;">Data Provenance:</span>
+              <span class="tag-badge" style="background:#064e3b44;color:#34d399;border:1px solid #059669;padding:2px 7px;font-size:0.72rem;border-radius:4px;" title="Empirical ground-truth from Forest Survey of India 2021 assessment and state working plans">
+                <i data-lucide="database" style="width:11px;height:11px;display:inline-block;vertical-align:middle;margin-right:3px;"></i>[EMPIRICAL BASELINE] FSI ISFR 2021
+              </span>
+              <span class="tag-badge" style="background:#08334444;color:#38bdf8;border:1px solid #0284c7;padding:2px 7px;font-size:0.72rem;border-radius:4px;" title="Calculated using standard IPCC 0.47 carbon factor and allometric conversion">
+                <i data-lucide="calculator" style="width:11px;height:11px;display:inline-block;vertical-align:middle;margin-right:3px;"></i>[DERIVED ESTIMATES] IPCC Carbon Stock (0.47)
+              </span>
+              <span class="tag-badge" style="background:#3b076444;color:#c084fc;border:1px solid #9333ea;padding:2px 7px;font-size:0.72rem;border-radius:4px;" title="Live numerical solving via 4th-Order Runge-Kutta & 5-point discrete Laplacian spatial diffusion">
+                <i data-lucide="cpu" style="width:11px;height:11px;display:inline-block;vertical-align:middle;margin-right:3px;"></i>[COMPUTED RESULTS] Layer 3 30×30 RK4 + Diffusion
+              </span>
+              <span class="tag-badge" style="background:#1e293b;color:#94a3b8;border:1px solid #475569;padding:2px 7px;font-size:0.72rem;border-radius:4px;" title="Full native landscape engine executable requires dedicated Windows host runtime">
+                <i data-lucide="shield-alert" style="width:11px;height:11px;display:inline-block;vertical-align:middle;margin-right:3px;"></i>[UNAVAILABLE ON CLOUD] Layer 1 Windows Native Binary
+              </span>
+            </div>
+
             <div class="canvas-box">
               <canvas id="sim-canvas" width="560" height="560"></canvas>
             </div>
@@ -442,7 +459,7 @@
             <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #1e293b;padding-bottom:0.75rem;margin-bottom:1rem;">
               <div style="display:flex;align-items:center;gap:0.5rem;">
                 <i id="landis-results-icon" data-lucide="check-circle-2" style="color:#10b981;"></i>
-                <h4 style="margin:0;font-size:1.05rem;font-weight:700;color:#f8fafc;">NATIVE LANDSCAPE ENGINE RESULTS</h4>
+                <h4 id="landis-results-title" style="margin:0;font-size:1.05rem;font-weight:700;color:#f8fafc;">NATIVE LANDSCAPE ENGINE RESULTS</h4>
               </div>
               <span id="landis-results-badge" class="tag-badge observed">COMPLETED (Exit Code 0)</span>
             </div>

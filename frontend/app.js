@@ -1200,10 +1200,14 @@ document.addEventListener('DOMContentLoaded', () => {
         resultsIcon.setAttribute('data-lucide', 'info');
         resultsIcon.style.color = '#38bdf8';
       }
+      const resultsTitle = document.getElementById('landis-results-title');
+      if (resultsTitle) {
+        resultsTitle.textContent = 'LAYER 1 HOST DIAGNOSTICS (STANDALONE CLOUD MODE)';
+      }
       const badgeEl = document.getElementById('landis-results-badge');
       if (badgeEl) {
         badgeEl.className = 'tag-badge observed';
-        badgeEl.textContent = 'UNAVAILABLE ON CLOUD';
+        badgeEl.textContent = 'NOT EXECUTED (WINDOWS HOST REQUIRED)';
         badgeEl.style.background = '#1e293b';
         badgeEl.style.color = '#38bdf8';
         badgeEl.style.borderColor = '#0284c7';
@@ -1368,6 +1372,8 @@ document.addEventListener('DOMContentLoaded', () => {
             outputConsole.scrollTop = outputConsole.scrollHeight;
           }
           if (resultsPanel) {
+            const resultsTitle = document.getElementById('landis-results-title');
+            if (resultsTitle) { resultsTitle.textContent = 'LAYER 1 HOST DIAGNOSTICS (COMMUNICATION ERROR)'; }
             const elStat = document.getElementById('res-exec-status');
             if (elStat) { elStat.textContent = `HTTP ${res.status} ERROR`; elStat.style.color = '#ef4444'; }
             const elDur = document.getElementById('res-exec-duration');
@@ -1450,6 +1456,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
           // Populate Dedicated Results Panel
           if (resultsPanel) {
+            const resultsTitle = document.getElementById('landis-results-title');
+            if (resultsTitle) {
+              resultsTitle.textContent = 'NATIVE LANDSCAPE ENGINE RESULTS';
+            }
             const resultsIcon = document.getElementById('landis-results-icon');
             if (resultsIcon) {
               resultsIcon.setAttribute('data-lucide', 'check-circle-2');
@@ -1540,6 +1550,8 @@ document.addEventListener('DOMContentLoaded', () => {
           }
 
           if (resultsPanel) {
+            const resultsTitle = document.getElementById('landis-results-title');
+            if (resultsTitle) { resultsTitle.textContent = 'LAYER 1 HOST DIAGNOSTICS'; }
             const elStat = document.getElementById('res-exec-status');
             if (elStat) { elStat.textContent = 'UNAVAILABLE'; elStat.style.color = '#f59e0b'; }
             const elDur = document.getElementById('res-exec-duration');
@@ -1588,6 +1600,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (resultsPanel) {
+          const resultsTitle = document.getElementById('landis-results-title');
+          if (resultsTitle) { resultsTitle.textContent = isTimeout ? 'LAYER 1 HOST DIAGNOSTICS (TIMEOUT)' : 'LAYER 1 HOST DIAGNOSTICS (REQUEST ERROR)'; }
           const elStat = document.getElementById('res-exec-status');
           if (elStat) { elStat.textContent = isTimeout ? 'TIMED OUT' : 'REQUEST ERROR'; elStat.style.color = '#ef4444'; }
           const elDur = document.getElementById('res-exec-duration');
