@@ -417,7 +417,7 @@
         </div>
 
         <!-- Native Landscape Engine Execution Card -->
-        <div class="card mt-4">
+        <div class="card mt-4" id="card-native-engine">
           <div class="card-header">
             <div class="card-title">
               <i data-lucide="terminal"></i>
@@ -426,10 +426,14 @@
             <button class="btn btn-primary" id="btn-run-landis-engine">
               <i data-lucide="play"></i> <span>Run Native Landscape Simulation</span>
             </button>
+            <div id="badge-native-linux-only" class="tag-badge cloud-notice" style="display:none;background:#1e293b;color:#38bdf8;border:1px solid #0284c7;padding:0.4rem 0.85rem;font-size:0.8rem;font-weight:700;letter-spacing:0.04em;border-radius:6px;">
+              <i data-lucide="shield-alert" style="width:15px;height:15px;display:inline-block;vertical-align:middle;margin-right:4px;"></i>
+              NATIVE LANDSCAPE ENGINE — WINDOWS ONLY
+            </div>
           </div>
-          <div class="spatial-scale-info">
-            <span class="tag-badge observed">LAYER 1: NATIVE ENGINE OUTPUT</span>
-            <span class="scale-text">Executes native landscape simulation engine (.NET Framework 4.8 / Biomass Succession 7.2 + Output Biomass 4.1), generating 108 GeoTIFF rasters & CSV logs across 9,801 landscape cells.</span>
+          <div class="spatial-scale-info" id="native-engine-desc-box">
+            <span class="tag-badge observed" id="native-engine-scale-badge">LAYER 1: NATIVE ENGINE OUTPUT</span>
+            <span class="scale-text" id="native-engine-scale-text">Executes native landscape simulation engine (.NET Framework 4.8 / Biomass Succession 7.2 + Output Biomass 4.1), generating 108 GeoTIFF rasters & CSV logs across 9,801 landscape cells.</span>
           </div>
           <pre id="landis-stdout-console" class="terminal-console" style="background:#0a0f1d;color:#10b981;padding:1rem;border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:0.75rem;max-height:220px;overflow-y:auto;margin-top:0.75rem">Click 'Run Native Landscape Simulation' to execute scenario simulation.</pre>
 
@@ -437,56 +441,56 @@
           <div id="landis-results-panel" style="display:none;margin-top:1.25rem;background:#0d1527;border:1px solid #1e293b;border-radius:8px;padding:1.25rem;">
             <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #1e293b;padding-bottom:0.75rem;margin-bottom:1rem;">
               <div style="display:flex;align-items:center;gap:0.5rem;">
-                <i data-lucide="check-circle-2" style="color:#10b981;"></i>
+                <i id="landis-results-icon" data-lucide="check-circle-2" style="color:#10b981;"></i>
                 <h4 style="margin:0;font-size:1.05rem;font-weight:700;color:#f8fafc;">NATIVE LANDSCAPE ENGINE RESULTS</h4>
               </div>
               <span id="landis-results-badge" class="tag-badge observed">COMPLETED (Exit Code 0)</span>
             </div>
             
             <div id="landis-results-grid" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:0.75rem;">
-              <div class="card" style="padding:0.75rem;background:#131c31;border:1px solid #1e293b;">
+              <div class="card" id="card-res-exec-status" style="padding:0.75rem;background:#131c31;border:1px solid #1e293b;">
                 <span class="detail-lbl" style="font-size:0.7rem;color:#8b9cb5;text-transform:uppercase;letter-spacing:0.05em;">Execution Status</span>
                 <p id="res-exec-status" style="font-size:0.95rem;font-weight:700;color:#10b981;margin:0.25rem 0 0 0;">COMPLETED</p>
               </div>
-              <div class="card" style="padding:0.75rem;background:#131c31;border:1px solid #1e293b;">
-                <span class="detail-lbl" style="font-size:0.7rem;color:#8b9cb5;text-transform:uppercase;letter-spacing:0.05em;">Simulation Duration</span>
+              <div class="card" id="card-res-exec-duration" style="padding:0.75rem;background:#131c31;border:1px solid #1e293b;">
+                <span class="detail-lbl" id="lbl-res-exec-duration" style="font-size:0.7rem;color:#8b9cb5;text-transform:uppercase;letter-spacing:0.05em;">Simulation Duration</span>
                 <p id="res-exec-duration" style="font-size:0.95rem;font-weight:700;color:#f8fafc;margin:0.25rem 0 0 0;">--</p>
               </div>
-              <div class="card" style="padding:0.75rem;background:#131c31;border:1px solid #1e293b;">
-                <span class="detail-lbl" style="font-size:0.7rem;color:#8b9cb5;text-transform:uppercase;letter-spacing:0.05em;">Simulated Years</span>
+              <div class="card" id="card-res-sim-years" style="padding:0.75rem;background:#131c31;border:1px solid #1e293b;">
+                <span class="detail-lbl" id="lbl-res-sim-years" style="font-size:0.7rem;color:#8b9cb5;text-transform:uppercase;letter-spacing:0.05em;">Simulated Years</span>
                 <p id="res-sim-years" style="font-size:0.95rem;font-weight:700;color:#f8fafc;margin:0.25rem 0 0 0;">30 Years</p>
               </div>
-              <div class="card" style="padding:0.75rem;background:#131c31;border:1px solid #1e293b;">
-                <span class="detail-lbl" style="font-size:0.7rem;color:#8b9cb5;text-transform:uppercase;letter-spacing:0.05em;">Raster Outputs</span>
+              <div class="card" id="card-res-raster-count" style="padding:0.75rem;background:#131c31;border:1px solid #1e293b;">
+                <span class="detail-lbl" id="lbl-res-raster-count" style="font-size:0.7rem;color:#8b9cb5;text-transform:uppercase;letter-spacing:0.05em;">Raster Outputs</span>
                 <p id="res-raster-count" style="font-size:0.95rem;font-weight:700;color:#38bdf8;margin:0.25rem 0 0 0;">--</p>
               </div>
-              <div class="card" style="padding:0.75rem;background:#131c31;border:1px solid #1e293b;">
-                <span class="detail-lbl" style="font-size:0.7rem;color:#8b9cb5;text-transform:uppercase;letter-spacing:0.05em;">Trajectory Records</span>
+              <div class="card" id="card-res-traj-count" style="padding:0.75rem;background:#131c31;border:1px solid #1e293b;">
+                <span class="detail-lbl" id="lbl-res-traj-count" style="font-size:0.7rem;color:#8b9cb5;text-transform:uppercase;letter-spacing:0.05em;">Trajectory Records</span>
                 <p id="res-traj-count" style="font-size:0.95rem;font-weight:700;color:#f8fafc;margin:0.25rem 0 0 0;">--</p>
               </div>
-              <div class="card" style="padding:0.75rem;background:#131c31;border:1px solid #1e293b;">
-                <span class="detail-lbl" style="font-size:0.7rem;color:#8b9cb5;text-transform:uppercase;letter-spacing:0.05em;">Final Native Biomass</span>
+              <div class="card" id="card-res-final-native" style="padding:0.75rem;background:#131c31;border:1px solid #1e293b;">
+                <span class="detail-lbl" id="lbl-res-final-native" style="font-size:0.7rem;color:#8b9cb5;text-transform:uppercase;letter-spacing:0.05em;">Final Native Biomass</span>
                 <p id="res-final-native" style="font-size:0.95rem;font-weight:700;color:#10b981;margin:0.25rem 0 0 0;">--</p>
               </div>
-              <div class="card" style="padding:0.75rem;background:#131c31;border:1px solid #1e293b;">
-                <span class="detail-lbl" style="font-size:0.7rem;color:#8b9cb5;text-transform:uppercase;letter-spacing:0.05em;">Final Understory Biomass</span>
+              <div class="card" id="card-res-final-understory" style="padding:0.75rem;background:#131c31;border:1px solid #1e293b;">
+                <span class="detail-lbl" id="lbl-res-final-understory" style="font-size:0.7rem;color:#8b9cb5;text-transform:uppercase;letter-spacing:0.05em;">Final Understory Biomass</span>
                 <p id="res-final-understory" style="font-size:0.95rem;font-weight:700;color:#eab308;margin:0.25rem 0 0 0;">--</p>
               </div>
-              <div class="card" style="padding:0.75rem;background:#131c31;border:1px solid #1e293b;">
-                <span class="detail-lbl" style="font-size:0.7rem;color:#8b9cb5;text-transform:uppercase;letter-spacing:0.05em;">Final Invasive Biomass</span>
+              <div class="card" id="card-res-final-invasive" style="padding:0.75rem;background:#131c31;border:1px solid #1e293b;">
+                <span class="detail-lbl" id="lbl-res-final-invasive" style="font-size:0.7rem;color:#8b9cb5;text-transform:uppercase;letter-spacing:0.05em;">Final Invasive Biomass</span>
                 <p id="res-final-invasive" style="font-size:0.95rem;font-weight:700;color:#ef4444;margin:0.25rem 0 0 0;">--</p>
               </div>
-              <div class="card" style="padding:0.75rem;background:#131c31;border:1px solid #1e293b;">
-                <span class="detail-lbl" style="font-size:0.7rem;color:#8b9cb5;text-transform:uppercase;letter-spacing:0.05em;">Final Spectral Radius ρ(J_map)</span>
+              <div class="card" id="card-res-final-rho" style="padding:0.75rem;background:#131c31;border:1px solid #1e293b;">
+                <span class="detail-lbl" id="lbl-res-final-rho" style="font-size:0.7rem;color:#8b9cb5;text-transform:uppercase;letter-spacing:0.05em;">Final Spectral Radius ρ(J_map)</span>
                 <p id="res-final-rho" style="font-size:0.95rem;font-weight:700;color:#38bdf8;margin:0.25rem 0 0 0;">--</p>
               </div>
-              <div class="card" style="padding:0.75rem;background:#131c31;border:1px solid #1e293b;">
-                <span class="detail-lbl" style="font-size:0.7rem;color:#8b9cb5;text-transform:uppercase;letter-spacing:0.05em;">Stability Classification</span>
+              <div class="card" id="card-res-stability-class" style="padding:0.75rem;background:#131c31;border:1px solid #1e293b;">
+                <span class="detail-lbl" id="lbl-res-stability-class" style="font-size:0.7rem;color:#8b9cb5;text-transform:uppercase;letter-spacing:0.05em;">Stability Classification</span>
                 <p id="res-stability-class" style="font-size:0.95rem;font-weight:700;margin:0.25rem 0 0 0;">--</p>
               </div>
             </div>
 
-            <div style="margin-top:0.75rem;font-size:0.75rem;color:#64748b;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem;">
+            <div id="landis-results-footer" style="margin-top:0.75rem;font-size:0.75rem;color:#64748b;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem;">
               <span>Run Identifier: <code id="res-sim-id" style="color:#94a3b8;">--</code></span>
               <span id="res-verif-tag" style="color:#10b981;font-weight:600;">Finite-Difference Verified</span>
             </div>
@@ -702,6 +706,6 @@
     </main>
   </div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=2.0.1"></script>
 </body>
 </html>
