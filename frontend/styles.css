@@ -654,3 +654,19 @@ body {
   font-family: var(--font-mono);
   font-size: 0.85rem;
 }
+
+/* Leaflet Dark Attribution Bar */
+.leaflet-control-attribution {
+  background: rgba(11, 15, 23, 0.85) !important;
+  color: #8b9cb5 !important;
+  font-size: 10px !important;
+  padding: 2px 8px !important;
+  border-radius: 4px 0 0 0 !important;
+}
+.leaflet-control-attribution a {
+  color: #38bdf8 !important;
+  text-decoration: none !important;
+}
+.leaflet-control-attribution a:hover {
+  text-decoration: underline !important;
+}

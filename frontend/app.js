@@ -24,6 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let selectedCandidateSpecies = 'Lantana camara';
   let currentAssessmentRequestId = 0;
   let currentAssessmentData = null;
+  let isCloudLinuxMode = false;
 
   // Global handle for programmatic selection and retry
   window.selectPaDirect = (areaId) => selectProtectedArea(areaId);
@@ -75,7 +76,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // --- 2. Interactive Leaflet Map Initialization ---
-  function initLeafletMap(areas) {
+  function initLeafletMap(areas, cartoKey) {
     const mapEl = document.getElementById('gis-leaflet-map');
     if (!mapEl || typeof L === 'undefined') return;
 
@@ -83,13 +84,32 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!leafletMap) {
         leafletMap = L.map('gis-leaflet-map', {
           zoomControl: true,
-          attributionControl: false
+          attributionControl: true
         }).setView([15.5, 78.0], 5);
 
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-          maxZoom: 18,
-          subdomains: 'abcd'
-        }).addTo(leafletMap);
+        // Resolve CARTO API key from backend environment or window config
+        const apiKey = (cartoKey || (typeof window !== 'undefined' && window.CARTO_API_KEY) || '').trim();
+
+        if (apiKey) {
+          // Authenticated CARTO Dark Matter basemap (per CARTO key policy)
+          L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key={key}', {
+            key: apiKey,
+            maxZoom: 19,
+            subdomains: 'abcd',
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener noreferrer">CARTO</a>'
+          }).addTo(leafletMap);
+        } else {
+          // Compatible high-contrast dark basemap (Esri World Dark Gray Canvas)
+          // Free, high reliability, zero watermark, matching the scientific dark UI
+          L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+            maxZoom: 16,
+            attribution: 'Tiles &copy; <a href="https://www.esri.com" target="_blank" rel="noopener noreferrer">Esri</a> &mdash; Esri, DeLorme, NAVTEQ'
+          }).addTo(leafletMap);
+
+          L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
+            maxZoom: 16
+          }).addTo(leafletMap);
+        }
       }
 
       // Add markers for all protected areas
@@ -154,7 +174,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       // Initialize Leaflet Map
-      initLeafletMap(areas);
+      initLeafletMap(areas, data.carto_api_key);
 
       // Select default initial area
       selectProtectedArea(currentAreaId);
@@ -329,9 +349,9 @@ document.addEventListener('DOMContentLoaded', () => {
       // Recompute Baseline Jacobian for new forest
       computeBaselineJacobian(base);
 
-      // Hide previous forest's native engine results panel
+      // Hide previous forest's native engine results panel on Windows (preserve clean cloud state on Linux)
       const resPanel = document.getElementById('landis-results-panel');
-      if (resPanel) resPanel.style.display = 'none';
+      if (resPanel && !isCloudLinuxMode) resPanel.style.display = 'none';
 
       // Initialize Simulation with forest-specific initial state
       initSimulation();
@@ -1142,10 +1162,131 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // --- 7. Native Landscape Engine Simulation Button Handler ---
+  // --- 7. Platform Detection & Native Landscape Engine Configuration ---
+  function renderNativeEngineLinuxState() {
+    isCloudLinuxMode = true;
+    const landisRunBtn = document.getElementById('btn-run-landis-engine');
+    const linuxBadge = document.getElementById('badge-native-linux-only');
+    const descBadge = document.getElementById('native-engine-scale-badge');
+    const descText = document.getElementById('native-engine-scale-text');
+    const outputConsole = document.getElementById('landis-stdout-console');
+    const resultsPanel = document.getElementById('landis-results-panel');
+
+    if (landisRunBtn) landisRunBtn.style.display = 'none';
+    if (linuxBadge) linuxBadge.style.display = 'inline-flex';
+
+    if (descBadge) {
+      descBadge.className = 'tag-badge observed';
+      descBadge.textContent = 'LAYER 3: REDUCED-ORDER SPATIAL SIMULATOR ACTIVE';
+    }
+    if (descText) {
+      descText.textContent = 'Native landscape execution requires the Windows .NET/GDAL runtime. This Linux cloud deployment does not execute the native engine. Reduced-Order Spatial Simulator: OPERATIONAL';
+    }
+
+    if (outputConsole) {
+      outputConsole.textContent =
+        `========================================================================\n` +
+        `  NATIVE LANDSCAPE ENGINE — WINDOWS ONLY\n` +
+        `========================================================================\n` +
+        `  Native landscape execution requires the Windows .NET/GDAL runtime.\n` +
+        `  This Linux cloud deployment does not execute the native engine.\n\n` +
+        `  Reduced-Order Spatial Simulator: OPERATIONAL\n` +
+        `========================================================================`;
+    }
+
+    if (resultsPanel) {
+      const resultsIcon = document.getElementById('landis-results-icon');
+      if (resultsIcon) {
+        resultsIcon.setAttribute('data-lucide', 'info');
+        resultsIcon.style.color = '#38bdf8';
+      }
+      const badgeEl = document.getElementById('landis-results-badge');
+      if (badgeEl) {
+        badgeEl.className = 'tag-badge observed';
+        badgeEl.textContent = 'UNAVAILABLE ON CLOUD';
+        badgeEl.style.background = '#1e293b';
+        badgeEl.style.color = '#38bdf8';
+        badgeEl.style.borderColor = '#0284c7';
+      }
+
+      // Card 1: Execution Status
+      const elStat = document.getElementById('res-exec-status');
+      if (elStat) { elStat.textContent = 'UNAVAILABLE ON CLOUD'; elStat.style.color = '#38bdf8'; }
+
+      // Card 2: Platform
+      const lblDur = document.getElementById('lbl-res-exec-duration');
+      if (lblDur) lblDur.textContent = 'Platform';
+      const elDur = document.getElementById('res-exec-duration');
+      if (elDur) elDur.textContent = 'Linux';
+
+      // Card 3: Native Runtime
+      const lblYears = document.getElementById('lbl-res-sim-years');
+      if (lblYears) lblYears.textContent = 'Native Runtime';
+      const elYears = document.getElementById('res-sim-years');
+      if (elYears) elYears.textContent = 'Windows .NET/GDAL required';
+
+      // Card 4: Results
+      const lblRasters = document.getElementById('lbl-res-raster-count');
+      if (lblRasters) lblRasters.textContent = 'Results';
+      const elRasters = document.getElementById('res-raster-count');
+      if (elRasters) elRasters.textContent = 'NOT EXECUTED';
+
+      // Card 5: Spatial Simulator
+      const lblTraj = document.getElementById('lbl-res-traj-count');
+      if (lblTraj) lblTraj.textContent = 'Spatial Simulator';
+      const elTraj = document.getElementById('res-traj-count');
+      if (elTraj) elTraj.textContent = 'OPERATIONAL (Layer 3)';
+
+      // Card 6: Standalone Boundary
+      const lblNat = document.getElementById('lbl-res-final-native');
+      if (lblNat) lblNat.textContent = 'Execution Mode';
+      const elNat = document.getElementById('res-final-native');
+      if (elNat) elNat.textContent = 'STANDALONE REDUCED-ORDER';
+
+      // Hide unused cards for clean look on Linux
+      const cardUnd = document.getElementById('card-res-final-understory');
+      if (cardUnd) cardUnd.style.display = 'none';
+      const cardInv = document.getElementById('card-res-final-invasive');
+      if (cardInv) cardInv.style.display = 'none';
+      const cardRho = document.getElementById('card-res-final-rho');
+      if (cardRho) cardRho.style.display = 'none';
+      const cardStab = document.getElementById('card-res-stability-class');
+      if (cardStab) cardStab.style.display = 'none';
+
+      const simIdEl = document.getElementById('res-sim-id');
+      if (simIdEl) simIdEl.textContent = 'CLOUD_MODE_STANDALONE';
+      const verifTag = document.getElementById('res-verif-tag');
+      if (verifTag) {
+        verifTag.textContent = 'Layer 2/3 Coupled & Operational';
+        verifTag.style.color = '#38bdf8';
+      }
+
+      resultsPanel.style.display = 'block';
+      if (window.lucide) { try { lucide.createIcons(); } catch(e) {} }
+    }
+  }
+
+  async function checkPlatformAndConfigureNativeEngine() {
+    try {
+      const res = await fetch('/api/landis/status');
+      const data = await res.json();
+      if (!data.installed || data.status === 'UNAVAILABLE_ON_LINUX' || data.cloud_mode_active || (data.platform_os && !data.platform_os.startsWith('win'))) {
+        renderNativeEngineLinuxState();
+      }
+    } catch (e) {
+      console.warn('Platform status check notice:', e);
+    }
+  }
+
   const landisRunBtn = document.getElementById('btn-run-landis-engine');
   if (landisRunBtn) {
     landisRunBtn.addEventListener('click', async () => {
+      // If running on cloud / Linux, immediately activate the Linux safe state
+      if (isCloudLinuxMode) {
+        renderNativeEngineLinuxState();
+        return;
+      }
+
       // State 1 & 2: STARTING
       landisRunBtn.disabled = true;
       landisRunBtn.innerHTML = '<i data-lucide="loader" class="animate-spin"></i> <span>[STARTING] Initializing engine sandbox...</span>';
@@ -1180,7 +1321,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }, 2000);
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 150000); // 150s timeout
+      const timeoutId = setTimeout(() => controller.abort(), 240000); // 240s timeout
 
       try {
         const payload = {
@@ -1256,6 +1397,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         console.log('[Native Engine UI] Received response payload:', result);
 
+        // Check if response indicates UNAVAILABLE_ON_LINUX
+        if (result && (result.status === 'UNAVAILABLE_ON_LINUX' || result.execution?.status === 'UNAVAILABLE_ON_LINUX' || result.stderr === 'NATIVE_LANDSCAPE_ENGINE_UNAVAILABLE_ON_LINUX')) {
+          renderNativeEngineLinuxState();
+          return;
+        }
+
         if (result && result.success) {
           // State 3 & 4: PARSING & ANALYZING succeeded
           if (outputConsole) {
@@ -1303,25 +1450,57 @@ document.addEventListener('DOMContentLoaded', () => {
 
           // Populate Dedicated Results Panel
           if (resultsPanel) {
+            const resultsIcon = document.getElementById('landis-results-icon');
+            if (resultsIcon) {
+              resultsIcon.setAttribute('data-lucide', 'check-circle-2');
+              resultsIcon.style.color = '#10b981';
+            }
+
             const elStat = document.getElementById('res-exec-status');
             if (elStat) { elStat.textContent = 'COMPLETED (Exit Code 0)'; elStat.style.color = '#10b981'; }
+
+            const lblDur = document.getElementById('lbl-res-exec-duration');
+            if (lblDur) lblDur.textContent = 'Simulation Duration';
             const elDur = document.getElementById('res-exec-duration');
             if (elDur) elDur.textContent = `${dur}s`;
+
+            const lblYears = document.getElementById('lbl-res-sim-years');
+            if (lblYears) lblYears.textContent = 'Simulated Years';
             const elYears = document.getElementById('res-sim-years');
             if (elYears) elYears.textContent = '30 Years';
+
+            const lblRasters = document.getElementById('lbl-res-raster-count');
+            if (lblRasters) lblRasters.textContent = 'Raster Outputs';
             const elRasters = document.getElementById('res-raster-count');
             if (elRasters) elRasters.textContent = `${rCount} GeoTIFF files`;
+
+            const lblTraj = document.getElementById('lbl-res-traj-count');
+            if (lblTraj) lblTraj.textContent = 'Trajectory Records';
             const elTraj = document.getElementById('res-traj-count');
             if (elTraj) elTraj.textContent = `${trajLen} time points`;
+
+            const lblNat = document.getElementById('lbl-res-final-native');
+            if (lblNat) lblNat.textContent = 'Final Native Biomass';
             const elNat = document.getElementById('res-final-native');
             if (elNat) elNat.textContent = finalNative !== 'NOT AVAILABLE' ? `${finalNative} Mg/ha` : 'NOT AVAILABLE';
+
+            const cardUnd = document.getElementById('card-res-final-understory');
+            if (cardUnd) cardUnd.style.display = 'block';
             const elUnd = document.getElementById('res-final-understory');
             if (elUnd) elUnd.textContent = finalUnder !== 'NOT AVAILABLE' ? `${finalUnder} Mg/ha` : 'NOT AVAILABLE';
+
+            const cardInv = document.getElementById('card-res-final-invasive');
+            if (cardInv) cardInv.style.display = 'block';
             const elInv = document.getElementById('res-final-invasive');
             if (elInv) elInv.textContent = finalInv !== 'NOT AVAILABLE' ? `${finalInv} Mg/ha` : 'NOT AVAILABLE';
+
+            const cardRho = document.getElementById('card-res-final-rho');
+            if (cardRho) cardRho.style.display = 'block';
             const elRho = document.getElementById('res-final-rho');
             if (elRho) elRho.textContent = typeof finalRho === 'number' ? finalRho.toFixed(4) : finalRho;
             
+            const cardStab = document.getElementById('card-res-stability-class');
+            if (cardStab) cardStab.style.display = 'block';
             const stabEl = document.getElementById('res-stability-class');
             if (stabEl) {
               stabEl.textContent = stabClass;
@@ -1333,8 +1512,17 @@ document.addEventListener('DOMContentLoaded', () => {
             if (badgeEl) {
               badgeEl.className = 'tag-badge observed';
               badgeEl.textContent = 'COMPLETED (Exit Code 0)';
+              badgeEl.style.background = '';
+              badgeEl.style.color = '';
+              badgeEl.style.borderColor = '';
+            }
+            const verifTag = document.getElementById('res-verif-tag');
+            if (verifTag) {
+              verifTag.textContent = 'Finite-Difference Verified';
+              verifTag.style.color = '#10b981';
             }
             resultsPanel.style.display = 'block';
+            if (window.lucide) { try { lucide.createIcons(); } catch(e) {} }
           }
         } else {
           // State: FAILED / UNAVAILABLE
@@ -1344,7 +1532,7 @@ document.addEventListener('DOMContentLoaded', () => {
           const simId = result?.simulation_id || 'N/A';
 
           if (outputConsole) {
-            outputConsole.textContent += `\n=== [STATE: FAILED] NATIVE LANDSCAPE ENGINE NOTICE ===\n` +
+            outputConsole.textContent += `\n=== [STATE: NOTICE] NATIVE LANDSCAPE ENGINE NOTICE ===\n` +
               `Status: ${err}\n` +
               (stderr && stderr !== '(No stderr logged)' ? `Diagnostics: ${stderr}\n` : '') +
               `Note: The Layer 2/3 Reduced-Order Spatial Simulator remains fully operational.\n`;
@@ -1353,7 +1541,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
           if (resultsPanel) {
             const elStat = document.getElementById('res-exec-status');
-            if (elStat) { elStat.textContent = 'FAILED / UNAVAILABLE'; elStat.style.color = '#ef4444'; }
+            if (elStat) { elStat.textContent = 'UNAVAILABLE'; elStat.style.color = '#f59e0b'; }
             const elDur = document.getElementById('res-exec-duration');
             if (elDur) elDur.textContent = `${dur}s`;
             const elYears = document.getElementById('res-sim-years');
@@ -1373,16 +1561,17 @@ document.addEventListener('DOMContentLoaded', () => {
             const stabEl = document.getElementById('res-stability-class');
             if (stabEl) {
               stabEl.textContent = 'EXECUTION_UNAVAILABLE';
-              stabEl.style.color = '#ef4444';
+              stabEl.style.color = '#f59e0b';
             }
             const simIdEl = document.getElementById('res-sim-id');
             if (simIdEl) simIdEl.textContent = simId;
             const badgeEl = document.getElementById('landis-results-badge');
             if (badgeEl) {
-              badgeEl.className = 'tag-badge unstable';
+              badgeEl.className = 'tag-badge observed';
               badgeEl.textContent = 'UNAVAILABLE';
             }
             resultsPanel.style.display = 'block';
+            if (window.lucide) { try { lucide.createIcons(); } catch(e) {} }
           }
         }
       } catch (e) {
@@ -1390,7 +1579,7 @@ document.addEventListener('DOMContentLoaded', () => {
         clearInterval(runTimer);
         console.error('[Native Engine UI] Request failed:', e);
         const isTimeout = e.name === 'AbortError';
-        const msg = isTimeout ? 'Simulation request timed out after 150 seconds.' : `${e.message || e}`;
+        const msg = isTimeout ? 'Simulation request timed out after 240 seconds.' : `${e.message || e}`;
 
         if (outputConsole) {
           outputConsole.textContent += `\n=== [STATE: FAILED] REQUEST EXCEPTION ===\n` +
@@ -1402,7 +1591,7 @@ document.addEventListener('DOMContentLoaded', () => {
           const elStat = document.getElementById('res-exec-status');
           if (elStat) { elStat.textContent = isTimeout ? 'TIMED OUT' : 'REQUEST ERROR'; elStat.style.color = '#ef4444'; }
           const elDur = document.getElementById('res-exec-duration');
-          if (elDur) elDur.textContent = isTimeout ? '> 150s' : `${runSeconds}s`;
+          if (elDur) elDur.textContent = isTimeout ? '> 240s' : `${runSeconds}s`;
           const elYears = document.getElementById('res-sim-years');
           if (elYears) elYears.textContent = 'NOT AVAILABLE';
           const elRasters = document.getElementById('res-raster-count');
@@ -1425,17 +1614,19 @@ document.addEventListener('DOMContentLoaded', () => {
           const badgeEl = document.getElementById('landis-results-badge');
           if (badgeEl) {
             badgeEl.className = 'tag-badge unstable';
-            badgeEl.textContent = isTimeout ? 'TIMEOUT (150s)' : 'FAILED';
+            badgeEl.textContent = isTimeout ? 'TIMEOUT (240s)' : 'FAILED';
           }
           resultsPanel.style.display = 'block';
         }
       } finally {
         clearTimeout(timeoutId);
         clearInterval(runTimer);
-        landisRunBtn.disabled = false;
-        landisRunBtn.innerHTML = '<i data-lucide="play"></i> <span>Run Native Landscape Simulation</span>';
-        if (window.lucide) {
-          try { lucide.createIcons(); } catch(e) {}
+        if (!isCloudLinuxMode) {
+          landisRunBtn.disabled = false;
+          landisRunBtn.innerHTML = '<i data-lucide="play"></i> <span>Run Native Landscape Simulation</span>';
+          if (window.lucide) {
+            try { lucide.createIcons(); } catch(e) {}
+          }
         }
       }
     });
@@ -2074,18 +2265,19 @@ document.addEventListener('DOMContentLoaded', () => {
       let html = '';
 
       const c1 = comps['1_landis_engine_core'] || {};
+      const isC1Avail = c1.installed || c1.execution_available;
       html += `
         <div class="card">
-          <div class="card-header"><h4>1. Native Landscape Simulation Core</h4><span class="status-badge ${c1.installed ? 'observed' : 'unstable'}">${c1.status || 'OPERATIONAL'}</span></div>
-          <p style="font-size:0.8rem;color:#8b9cb5"><strong>Engine:</strong> <code>${c1.executable || 'N/A'}</code><br><strong>Extensions:</strong> ${(c1.extensions || []).join(', ') || 'Biomass Succession 7.2, Output Biomass 4.1'}</p>
+          <div class="card-header"><h4>1. Native Landscape Simulation Core</h4><span class="status-badge ${isC1Avail ? 'observed' : 'unstable'}">${c1.status || 'OPERATIONAL'}</span></div>
+          <p style="font-size:0.8rem;color:#8b9cb5"><strong>Engine:</strong> <code>${c1.executable || 'N/A'}</code><br><strong>Platform:</strong> ${data.platform_os || 'unknown'}${c1.reason ? `<br><strong>Notice:</strong> ${c1.reason}` : ''}</p>
         </div>
       `;
 
       const c2 = comps['2_landis_execution_verification'] || {};
       html += `
         <div class="card">
-          <div class="card-header"><h4>2. Native Landscape Simulation Output</h4><span class="status-badge observed">${c2.status || 'VERIFIED'}</span></div>
-          <p style="font-size:0.8rem;color:#8b9cb5"><strong>Rasters Generated:</strong> ${c2.output_geotiff_rasters || 108} GeoTIFF files<br><strong>Output Logs:</strong> ${(c2.output_logs || []).join(', ')}</p>
+          <div class="card-header"><h4>2. Native Landscape Simulation Output</h4><span class="status-badge ${c2.verified ? 'observed' : (c2.status === 'UNAVAILABLE_ON_LINUX' ? 'cloud-notice' : 'unstable')}">${c2.status || 'VERIFIED'}</span></div>
+          <p style="font-size:0.8rem;color:#8b9cb5">${c2.verified ? `<strong>Rasters Generated:</strong> ${c2.output_geotiff_rasters || 108} GeoTIFF files<br><strong>Output Logs:</strong> ${(c2.output_logs || []).join(', ')}` : (c2.message || 'Windows .NET/GDAL required.')}</p>
         </div>
       `;
 
@@ -2233,6 +2425,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-print-report')?.addEventListener('click', () => window.print());
 
   // --- Initial Boot ---
+  checkPlatformAndConfigureNativeEngine();
   loadProtectedAreas();
   loadSpeciesLibrary();
   loadScenarios();
